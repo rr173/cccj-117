@@ -1,0 +1,8 @@
+{
+  "consumer": "edge",
+  "enabled": false,
+  "generation": 2,
+  "revoked_deliveries": 0,
+  "retention_hold_released": true,
+  "tail_seq": 8
+}

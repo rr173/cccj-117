@@ -4,5 +4,6 @@
   "accepted": 1,
   "accepted_existing": 0,
   "withdrawn_suppressed": 0,
+  "feed_events": true,
   "receipt": "receipts/lockt-b1-84be9431.jsonl"
 }

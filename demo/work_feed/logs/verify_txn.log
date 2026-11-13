@@ -1,0 +1,4 @@
+rollback leaves events=0 frames=0 head=None
+frames: [(1, 1, 1, 1), (2, 2, 2, 1)]
+events: [(1, 1, 1, 'refresh', 'b'), (2, 2, 1, 'refresh', 'a')]
+producer transaction checks: OK

@@ -1,0 +1,8 @@
+ok   frames
+ok   events
+ok   consumer live
+ok   consumer slow
+ok   retention floor
+ok   tail seq
+ok   pending deliveries
+ok   removed object set

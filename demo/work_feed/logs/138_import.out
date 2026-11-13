@@ -1,0 +1,9 @@
+{
+  "batch_tag": "e7",
+  "status": "accepted",
+  "accepted": 1,
+  "accepted_existing": 0,
+  "withdrawn_suppressed": 0,
+  "feed_events": true,
+  "receipt": "receipts/e7-f3e2e400.jsonl"
+}

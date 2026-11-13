@@ -1,0 +1,3 @@
+{"study": "obs", "person": "alice", "observation": "ob1", "edition": 3, "display_name": "Alice Ng", "measure": 13, "memo": "a-ob1-e3"}
+{"study": "obs", "person": "alice", "observation": "ob6", "edition": 2, "display_name": "Alice Ng", "measure": 12, "memo": "a-ob6-e2"}
+{"study": "obs", "person": "bob", "observation": "ob7", "edition": 1, "display_name": "Bob Ito", "measure": 21, "memo": "b-ob7-e1"}

@@ -1,0 +1,10 @@
+{
+  "batch_tag": "bad",
+  "status": "rejected",
+  "errors": [
+    {
+      "line": 2,
+      "reason": "invalid JSON"
+    }
+  ]
+}

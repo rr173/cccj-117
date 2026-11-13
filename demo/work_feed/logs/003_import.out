@@ -1,0 +1,9 @@
+{
+  "batch_tag": "f1",
+  "status": "accepted",
+  "accepted": 4,
+  "accepted_existing": 0,
+  "withdrawn_suppressed": 0,
+  "feed_events": true,
+  "receipt": "receipts/f1-3f524cdc.jsonl"
+}

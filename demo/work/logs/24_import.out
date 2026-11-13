@@ -4,5 +4,6 @@
   "accepted": 2,
   "accepted_existing": 0,
   "withdrawn_suppressed": 2,
+  "feed_events": true,
   "receipt": "receipts/alpha-b4-4e8b9505.jsonl"
 }

@@ -1,0 +1,6 @@
+{
+  "consumer": "edge",
+  "token": "D3e52cceeb4d323d7acabcaf5",
+  "acked_seq": 4,
+  "replayed": true
+}

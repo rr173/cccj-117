@@ -1,0 +1,3 @@
+{"line": 1, "study": "obs", "observation": "ob1", "person": "alice", "edition": 3, "disposition": "withdrawn_suppressed"}
+{"line": 2, "study": "obs", "observation": "ob6", "person": "alice", "edition": 2, "disposition": "withdrawn_suppressed"}
+{"line": 3, "study": "obs", "observation": "ob7", "person": "bob", "edition": 1, "disposition": "accepted"}

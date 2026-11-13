@@ -1,0 +1,37 @@
+{
+  "study": "obs",
+  "observations": [
+    {
+      "observation": "ob1",
+      "person": "alice",
+      "edition": 1,
+      "display_name": "Alice Ng",
+      "measure": 11,
+      "memo": "a-ob1-e1"
+    },
+    {
+      "observation": "ob2",
+      "person": "alice",
+      "edition": 1,
+      "display_name": "Alice Ng",
+      "measure": 11,
+      "memo": "a-ob2-e1"
+    },
+    {
+      "observation": "ob3",
+      "person": "bob",
+      "edition": 5,
+      "display_name": "Bob Ito",
+      "measure": 25,
+      "memo": "b-ob3-e5"
+    },
+    {
+      "observation": "ob4",
+      "person": "cara",
+      "edition": 1,
+      "display_name": "Cara Vu",
+      "measure": 31,
+      "memo": "c-ob4-e1"
+    }
+  ]
+}

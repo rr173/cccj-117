@@ -1,0 +1,9 @@
+{
+  "batch_tag": "g6",
+  "status": "accepted",
+  "accepted": 1,
+  "accepted_existing": 0,
+  "withdrawn_suppressed": 0,
+  "feed_events": true,
+  "receipt": "receipts/g6-044e727f.jsonl"
+}

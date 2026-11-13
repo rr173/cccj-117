@@ -1,0 +1,13 @@
+{
+  "study": "obs",
+  "observations": [
+    {
+      "observation": "ob4",
+      "person": "cara",
+      "edition": 1,
+      "display_name": "Cara Vu",
+      "measure": 31,
+      "memo": "c-ob4-e1"
+    }
+  ]
+}

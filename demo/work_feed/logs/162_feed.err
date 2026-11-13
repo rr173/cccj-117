@@ -1,0 +1,1 @@
+{"code": "trim_rejected", "error": "no enabled consumers: refusing to delete with an unbounded range; pass --through-seq for an explicit upper bound"}

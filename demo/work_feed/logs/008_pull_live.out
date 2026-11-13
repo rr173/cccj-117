@@ -1,0 +1,8 @@
+START delivery=D9cc29fef2ce83a7371c6094c from=1 through=4 target=3 frames=1 head=4 events=4 empty=0 replay=1
+FRAME id=1 index=1 of=1 ts=2026-11-13T23:49:52Z start=1 end=4 events=4
+EVENT seq=1 frame=1 ordinal=1 op=refresh study=obs observation=ob1
+EVENT seq=2 frame=1 ordinal=2 op=refresh study=obs observation=ob2
+EVENT seq=3 frame=1 ordinal=3 op=refresh study=obs observation=ob3
+EVENT seq=4 frame=1 ordinal=4 op=refresh study=obs observation=ob4
+ENDFRAME id=1 events=4 first=1 last=4
+END events=4 frames=1 empty=0

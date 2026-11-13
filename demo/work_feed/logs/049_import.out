@@ -1,0 +1,9 @@
+{
+  "batch_tag": "post",
+  "status": "accepted",
+  "accepted": 1,
+  "accepted_existing": 0,
+  "withdrawn_suppressed": 2,
+  "feed_events": true,
+  "receipt": "receipts/post-72231043.jsonl"
+}

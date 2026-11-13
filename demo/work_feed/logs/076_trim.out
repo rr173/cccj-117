@@ -1,0 +1,12 @@
+{
+  "trimmed_events": 2,
+  "trimmed_frames": 1,
+  "retention_floor": 6,
+  "earliest_available_seq": 7,
+  "tail_seq": 17,
+  "trimmed_through": 6,
+  "trimmed_frame_ids": [
+    2
+  ],
+  "blocked_by": []
+}

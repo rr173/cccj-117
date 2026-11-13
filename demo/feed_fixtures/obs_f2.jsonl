@@ -1,0 +1,4 @@
+{"study": "obs", "person": "alice", "observation": "ob1", "edition": 2, "display_name": "Alice Ng", "measure": 12, "memo": "a-ob1-e2"}
+{"study": "obs", "person": "bob", "observation": "ob3", "edition": 6, "display_name": "Bob Ito", "measure": 26, "memo": "b-ob3-e6"}
+{"study": "obs", "person": "alice", "observation": "ob1", "edition": 1, "display_name": "Alice Ng", "measure": 11, "memo": "a-ob1-e1"}
+{"study": "obs", "person": "cara", "observation": "ob4", "edition": 1, "display_name": "Cara Vu", "measure": 31, "memo": "c-ob4-e1"}

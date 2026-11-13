@@ -12,10 +12,17 @@
   rvault --store S withdraw resume (--withdrawal-id W | --all)
   rvault --store S withdraw status [--withdrawal-id W]
   rvault --store S reconcile
+  rvault --store S feed register --consumer NAME [--from-seq N] [--reactivate]
+  rvault --store S feed pull --consumer NAME [--limit N] [--preview]
+  rvault --store S feed ack --consumer NAME --token TOKEN
+  rvault --store S feed disable --consumer NAME
+  rvault --store S feed status [--consumer NAME]
+  rvault --store S feed trim [--through-seq N]
 
-Exit codes: 0 ok; 2 rejected input / conflicting credential or withdrawal;
-3 bundle aborted because a withdrawal landed during creation; 4 unknown or
-unreadable object; 5 integrity failure.
+Exit codes: 0 ok; 2 rejected input / conflicting credential, withdrawal, ack or
+trim; 3 bundle aborted because a withdrawal landed during creation; 4 unknown or
+unreadable object; 5 integrity failure; 6 change-feed start position no longer
+retained (gap).
 """
 from __future__ import annotations
 
@@ -24,6 +31,7 @@ import json
 import sys
 
 from . import bundles as bundles_mod
+from . import changefeed as feed_mod
 from . import intake as intake_mod
 from . import query as query_mod
 from . import withdraw as withdraw_mod
@@ -92,6 +100,31 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--withdrawal-id")
 
     sub.add_parser("reconcile", help="sweep crash leftovers (also runs automatically)")
+
+    f = sub.add_parser("feed", help="persistent change notifications for indexers")
+    fsub = f.add_subparsers(dest="fcmd", required=True)
+    sp = fsub.add_parser("register", help="create or re-enable a named consumer")
+    sp.add_argument("--consumer", required=True)
+    sp.add_argument("--from-seq", type=int,
+                    help="explicit retained start (default: current tail)")
+    sp.add_argument("--reactivate", action="store_true",
+                    help="re-enable a disabled name as a new lifecycle")
+    sp = fsub.add_parser("pull", help="deliver the pending range (line protocol)")
+    sp.add_argument("--consumer", required=True)
+    sp.add_argument("--limit", type=int, default=1000,
+                    help="target event count; frames are never split (default 1000)")
+    sp.add_argument("--preview", action="store_true",
+                    help="show what the next pull would deliver; creates nothing")
+    sp = fsub.add_parser("ack", help="acknowledge a delivery token")
+    sp.add_argument("--consumer", required=True)
+    sp.add_argument("--token", required=True)
+    sp = fsub.add_parser("disable", help="stop receiving and release retention hold")
+    sp.add_argument("--consumer", required=True)
+    sp = fsub.add_parser("status", help="backlog, positions and retention floor")
+    sp.add_argument("--consumer")
+    sp = fsub.add_parser("trim", help="delete fully acknowledged frames")
+    sp.add_argument("--through-seq", type=int,
+                    help="explicit upper bound (required when no consumer is enabled)")
     return p
 
 
@@ -220,4 +253,49 @@ def main(argv=None) -> int:
             _print({"withdrawals": sts})
             return 0
 
+    if args.cmd == "feed":
+        return _feed_command(store, args)
+
+    return 1
+
+
+def _feed_error(e) -> int:
+    payload = e.as_dict() if hasattr(e, "as_dict") else {"code": "error", "error": str(e)}
+    print(json.dumps(payload, ensure_ascii=False), file=sys.stderr)
+    return e.exit_code
+
+
+def _feed_command(store, args) -> int:
+    try:
+        if args.fcmd == "register":
+            _print(feed_mod.register(store, args.consumer, start_from=args.from_seq,
+                                     reactivate=args.reactivate))
+            return 0
+        if args.fcmd == "disable":
+            _print(feed_mod.disable(store, args.consumer))
+            return 0
+        if args.fcmd == "ack":
+            _print(feed_mod.ack(store, args.consumer, args.token))
+            return 0
+        if args.fcmd == "status":
+            _print(feed_mod.status(store, args.consumer))
+            return 0
+        if args.fcmd == "trim":
+            _print(feed_mod.trim(store, args.through_seq))
+            return 0
+        if args.fcmd == "pull":
+            gen = (feed_mod.preview(store, args.consumer, args.limit)
+                   if args.preview
+                   else feed_mod.iter_delivery(store, args.consumer, args.limit))
+            try:
+                for line in gen:
+                    sys.stdout.write(line)
+                    sys.stdout.flush()
+            except BrokenPipeError:
+                return 0
+            return 0
+    except feed_mod.StartOutOfRange as e:
+        return _feed_error(e)
+    except (feed_mod.ChangeFeedError, ValueError) as e:
+        return _feed_error(e)
     return 1

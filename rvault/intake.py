@@ -26,6 +26,7 @@ import hashlib
 import json
 import os
 
+from . import changefeed
 from .store import reconcile
 from .util import now_iso, safe_name, sha256_hex
 
@@ -69,6 +70,22 @@ def _add_error(errors: list, entry: dict) -> None:
         errors.append(entry)
     elif len(errors) == _MAX_ERRORS:
         errors.append({"reason": "further errors truncated"})
+
+
+def _peek_object(raw: bytes):
+    """Best-effort (study, observation) of a raw line, only to scope the
+    change-feed probe around _process_line.  Malformed lines return None and
+    are diagnosed by _process_line as usual."""
+    try:
+        obj = json.loads(raw.decode("utf-8"))
+    except Exception:
+        return None
+    if not isinstance(obj, dict):
+        return None
+    study, obs = obj.get("study"), obj.get("observation")
+    if isinstance(study, str) and study and isinstance(obs, str) and obs:
+        return study, obs
+    return None
 
 
 def _process_line(conn, batch_tag: str, line_no: int, raw: bytes, errors: list):
@@ -190,11 +207,22 @@ def import_batch(store, batch_tag: str, src):
         errors = []
         counts = {"accepted": 0, "accepted_existing": 0, "withdrawn_suppressed": 0}
         receipt_tmp = os.path.join(store.tmp_dir, "receipt.%d.jsonl" % os.getpid())
+        feed = changefeed.EventCollector()
+        tracker = changefeed.LineTracker(conn, feed)
         conn.execute("BEGIN IMMEDIATE")
         try:
             with open(spool, "rb") as f, open(receipt_tmp, "w", encoding="utf-8") as rcpt:
                 for line_no, raw in enumerate(f, 1):
+                    # Feed intent is derived from the write itself (see
+                    # LineTracker): only a newly stored row whose edition is
+                    # the new maximum becomes a refresh.  Duplicate re-delivery
+                    # and legal older editions insert no row, so no event.
+                    probe = _peek_object(raw)
+                    if probe is not None:
+                        tracker.begin(*probe)
                     result = _process_line(conn, batch_tag, line_no, raw, errors)
+                    if probe is not None:
+                        tracker.end()
                     if result is not None:
                         disposition, item = result
                         counts[disposition] += 1
@@ -202,6 +230,9 @@ def import_batch(store, batch_tag: str, src):
             if errors:
                 conn.execute("ROLLBACK")
             else:
+                # Same transaction as the business rows: a rejected batch
+                # never leaves a consumable event behind.
+                frame_id = feed.commit(conn, "intake:" + batch_tag)
                 conn.execute(
                     "INSERT INTO batches VALUES (?,?,?,?,?)",
                     (batch_tag, now_iso(), dg,
@@ -226,6 +257,7 @@ def import_batch(store, batch_tag: str, src):
                    "accepted": counts["accepted"],
                    "accepted_existing": counts["accepted_existing"],
                    "withdrawn_suppressed": counts["withdrawn_suppressed"],
+                   "feed_events": frame_id is not None,
                    "receipt": os.path.relpath(path, store.root)}
     finally:
         conn.close()

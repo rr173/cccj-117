@@ -1,0 +1,6 @@
+{
+  "consumer": "slow",
+  "token": "Da856052ccc025d468463d0ce",
+  "acked_seq": 17,
+  "replayed": false
+}

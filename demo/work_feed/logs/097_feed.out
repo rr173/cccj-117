@@ -1,0 +1,8 @@
+{
+  "consumer": "late",
+  "enabled": false,
+  "generation": 1,
+  "revoked_deliveries": 0,
+  "retention_hold_released": true,
+  "tail_seq": 17
+}

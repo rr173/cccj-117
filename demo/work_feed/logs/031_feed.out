@@ -1,0 +1,18 @@
+{
+  "retention_floor": 0,
+  "earliest_available_seq": 1,
+  "tail_seq": 9,
+  "enabled_consumers": [
+    {
+      "name": "live",
+      "generation": 1,
+      "start_seq": 1,
+      "acked_seq": 8,
+      "enabled": true,
+      "backlog_events": 1
+    }
+  ],
+  "disabled_consumers": [],
+  "frames_retained": 4,
+  "events_retained": 9
+}

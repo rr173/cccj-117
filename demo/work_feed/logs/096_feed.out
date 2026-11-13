@@ -1,0 +1,9 @@
+{
+  "consumer": "late",
+  "generation": 1,
+  "start_seq": 18,
+  "acked_seq": 17,
+  "mode": "explicit",
+  "retention_floor": 17,
+  "tail_seq": 17
+}

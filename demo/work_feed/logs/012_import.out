@@ -1,0 +1,9 @@
+{
+  "batch_tag": "f2",
+  "status": "accepted",
+  "accepted": 2,
+  "accepted_existing": 2,
+  "withdrawn_suppressed": 0,
+  "feed_events": true,
+  "receipt": "receipts/f2-e4ab4e3b.jsonl"
+}

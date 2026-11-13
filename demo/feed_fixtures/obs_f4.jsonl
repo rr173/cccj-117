@@ -1,0 +1,5 @@
+{"study": "obs", "person": "alice", "observation": "ob5", "edition": 1, "display_name": "Alice Ng", "measure": 11, "memo": "a-ob5-e1"}
+{"study": "obs", "person": "alice", "observation": "ob5", "edition": 2, "display_name": "Alice Ng", "measure": 12, "memo": "a-ob5-e2"}
+{"study": "obs", "person": "alice", "observation": "ob5", "edition": 3, "display_name": "Alice Ng", "measure": 13, "memo": "a-ob5-e3"}
+{"study": "obs", "person": "bob", "observation": "ob3", "edition": 7, "display_name": "Bob Ito", "measure": 27, "memo": "b-ob3-e7"}
+{"study": "obs", "person": "bob", "observation": "ob3", "edition": 8, "display_name": "Bob Ito", "measure": 28, "memo": "b-ob3-e8"}

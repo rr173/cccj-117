@@ -1,0 +1,1 @@
+{"code": "lifecycle_conflict", "error": "re-enabling consumer 'edge' starts a new lifecycle: an explicit start position is required", "consumer": "edge"}

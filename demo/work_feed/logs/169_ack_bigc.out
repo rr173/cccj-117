@@ -1,0 +1,6 @@
+{
+  "consumer": "bigc",
+  "token": "Dcbdc435a6cb78486a30cbb73",
+  "acked_seq": 120000,
+  "replayed": false
+}

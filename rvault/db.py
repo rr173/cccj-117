@@ -15,6 +15,18 @@ barrier                 : (study, person) pairs under withdrawal; registered fir
 bundles / bundle_participants :
                           registry of issued bundles; ids are never reused
 counters                : monotonic id sequences
+
+Change-feed tables (see changefeed.py):
+cf_meta                 : durable feed bookkeeping (head_seq, retention_floor)
+cf_frames / cf_events   : committed notification frames and their events
+                          (identifiers only - never a research payload)
+cf_intents             : per-transaction object intents, deduplicated by
+                          SQLite and discarded with the transaction
+cf_removed_objects      : every object ever announced as removed; a refresh
+                          is never emitted for one of these again
+cf_consumers            : named consumers with their own durable acked_seq
+cf_deliveries /         : the single pending (or acknowledged) delivery
+cf_delivery_frames        range per consumer, with its ack credential
 """
 from __future__ import annotations
 
@@ -99,6 +111,66 @@ CREATE TABLE IF NOT EXISTS withdrawal_bundles(
   state TEXT NOT NULL,              -- pending | cleared | missing | refused
   note TEXT,
   PRIMARY KEY(withdrawal_id, bundle_id)
+);
+CREATE TABLE IF NOT EXISTS cf_meta(
+  name TEXT PRIMARY KEY,
+  value INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS cf_frames(
+  frame_id INTEGER PRIMARY KEY,
+  frame_ts TEXT NOT NULL,
+  start_seq INTEGER NOT NULL,
+  end_seq INTEGER NOT NULL,
+  event_count INTEGER NOT NULL,
+  actor TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS cf_events(
+  seq INTEGER PRIMARY KEY,
+  frame_id INTEGER NOT NULL,
+  ordinal INTEGER NOT NULL,
+  op TEXT NOT NULL,                 -- refresh | remove
+  study TEXT NOT NULL,
+  observation TEXT NOT NULL,
+  UNIQUE(frame_id, ordinal)
+);
+CREATE INDEX IF NOT EXISTS cf_events_frame ON cf_events(frame_id, ordinal);
+CREATE TABLE IF NOT EXISTS cf_intents(
+  session TEXT NOT NULL,            -- one open business transaction
+  study TEXT NOT NULL,
+  observation TEXT NOT NULL,
+  op TEXT NOT NULL,                 -- refresh | remove (remove dominates)
+  PRIMARY KEY(session, study, observation)
+);
+CREATE TABLE IF NOT EXISTS cf_removed_objects(
+  study TEXT NOT NULL,
+  observation TEXT NOT NULL,
+  PRIMARY KEY(study, observation)
+);
+CREATE TABLE IF NOT EXISTS cf_consumers(
+  name TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL,
+  generation INTEGER NOT NULL,
+  start_seq INTEGER NOT NULL,
+  acked_seq INTEGER NOT NULL,
+  disabled_at TEXT
+);
+CREATE TABLE IF NOT EXISTS cf_deliveries(
+  delivery_id TEXT PRIMARY KEY,
+  consumer TEXT NOT NULL,
+  generation INTEGER NOT NULL,
+  token TEXT NOT NULL,
+  from_seq INTEGER NOT NULL,
+  through_seq INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  state TEXT NOT NULL,              -- pending | acked | revoked
+  acked_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS cf_one_pending_delivery
+  ON cf_deliveries(consumer) WHERE state='pending';
+CREATE TABLE IF NOT EXISTS cf_delivery_frames(
+  delivery_id TEXT NOT NULL,
+  frame_id INTEGER NOT NULL,
+  PRIMARY KEY(delivery_id, frame_id)
 );
 """
 

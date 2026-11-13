@@ -1,0 +1,4 @@
+{"line": 1, "study": "obs", "observation": "ob1", "person": "alice", "edition": 1, "disposition": "accepted"}
+{"line": 2, "study": "obs", "observation": "ob2", "person": "alice", "edition": 1, "disposition": "accepted"}
+{"line": 3, "study": "obs", "observation": "ob3", "person": "bob", "edition": 5, "disposition": "accepted"}
+{"line": 4, "study": "obs", "observation": "ob4", "person": "cara", "edition": 1, "disposition": "accepted"}

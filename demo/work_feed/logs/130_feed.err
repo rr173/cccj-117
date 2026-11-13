@@ -1,0 +1,1 @@
+{"code": "consumer_disabled", "error": "consumer 'edge' is disabled; re-enabling is a new lifecycle and requires --reactivate with an explicit start", "consumer": "edge", "tail_seq": 6, "retention_floor": 0}

@@ -4,5 +4,6 @@
   "accepted": 1,
   "accepted_existing": 0,
   "withdrawn_suppressed": 0,
+  "feed_events": true,
   "receipt": "receipts/vandal-b1-60e8f4d3.jsonl"
 }

@@ -1,0 +1,9 @@
+{
+  "batch_tag": "f4",
+  "status": "accepted",
+  "accepted": 5,
+  "accepted_existing": 0,
+  "withdrawn_suppressed": 0,
+  "feed_events": true,
+  "receipt": "receipts/f4-608cdb52.jsonl"
+}

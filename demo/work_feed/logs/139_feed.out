@@ -1,0 +1,9 @@
+{
+  "consumer": "ra",
+  "generation": 1,
+  "start_seq": 6,
+  "acked_seq": 5,
+  "mode": "explicit",
+  "retention_floor": 0,
+  "tail_seq": 8
+}

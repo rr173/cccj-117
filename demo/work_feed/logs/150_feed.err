@@ -1,0 +1,1 @@
+{"code": "start_out_of_range", "error": "requested start is no longer retained", "reason": "gap", "requested_seq": 2, "retention_floor": 4, "earliest_available_seq": 5}

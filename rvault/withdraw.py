@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import os
 
+from . import changefeed
 from .store import reconcile, study_lock
 from .syncpoints import sync_point
 from .util import now_iso, sha256_hex
@@ -106,6 +107,13 @@ def register(store, wid: str, study: str, persons: list) -> dict:
                 # both registries stay in force.
                 conn.executemany("INSERT OR IGNORE INTO barrier VALUES (?,?,?)",
                                  [(study, p, wid) for p in persons])
+                # Remove notifications are written by the SAME transaction as
+                # the barrier: from this commit they are consumable even
+                # though erasure stages have not run yet.  An object already
+                # announced as removed by an earlier withdrawal is skipped by
+                # INSERT OR IGNORE inside the collector, so it can never be
+                # brought back later.
+                changefeed.on_withdrawal_registered(conn, wid, study, persons)
             elif w["study"] != study or w["person_hash"] != ph:
                 conn.execute("ROLLBACK")
                 raise WithdrawalConflict(wid)

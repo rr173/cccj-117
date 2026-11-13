@@ -1,0 +1,6 @@
+{
+  "consumer": "live",
+  "token": "Df910994488c3df1b9ac4ebc0",
+  "acked_seq": 8,
+  "replayed": false
+}

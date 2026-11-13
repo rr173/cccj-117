@@ -1,0 +1,42 @@
+{
+  "retention_floor": 4,
+  "earliest_available_seq": 5,
+  "tail_seq": 8,
+  "enabled_consumers": [],
+  "disabled_consumers": [
+    {
+      "name": "edge",
+      "generation": 2,
+      "start_seq": 1,
+      "acked_seq": 8,
+      "enabled": false,
+      "backlog_events": 0
+    },
+    {
+      "name": "other",
+      "generation": 1,
+      "start_seq": 5,
+      "acked_seq": 8,
+      "enabled": false,
+      "backlog_events": 0
+    },
+    {
+      "name": "ra",
+      "generation": 1,
+      "start_seq": 6,
+      "acked_seq": 8,
+      "enabled": false,
+      "backlog_events": 0
+    },
+    {
+      "name": "race_keep",
+      "generation": 1,
+      "start_seq": 5,
+      "acked_seq": 4,
+      "enabled": false,
+      "backlog_events": 4
+    }
+  ],
+  "frames_retained": 4,
+  "events_retained": 4
+}

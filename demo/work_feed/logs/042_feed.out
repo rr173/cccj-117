@@ -1,0 +1,43 @@
+{
+  "retention_floor": 0,
+  "earliest_available_seq": 1,
+  "tail_seq": 9,
+  "enabled_consumers": [
+    {
+      "name": "live",
+      "generation": 1,
+      "start_seq": 1,
+      "acked_seq": 9,
+      "enabled": true,
+      "backlog_events": 0
+    },
+    {
+      "name": "slow",
+      "generation": 1,
+      "start_seq": 1,
+      "acked_seq": 0,
+      "enabled": true,
+      "backlog_events": 9
+    }
+  ],
+  "disabled_consumers": [
+    {
+      "name": "peeker",
+      "generation": 1,
+      "start_seq": 10,
+      "acked_seq": 9,
+      "enabled": false,
+      "backlog_events": 0
+    }
+  ],
+  "consumer": {
+    "name": "live",
+    "generation": 1,
+    "start_seq": 1,
+    "acked_seq": 9,
+    "enabled": true,
+    "backlog_events": 0
+  },
+  "frames_retained": 4,
+  "events_retained": 9
+}

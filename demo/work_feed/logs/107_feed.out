@@ -1,0 +1,36 @@
+{
+  "retention_floor": 0,
+  "earliest_available_seq": 1,
+  "tail_seq": 4,
+  "enabled_consumers": [
+    {
+      "name": "edge",
+      "generation": 1,
+      "start_seq": 1,
+      "acked_seq": 3,
+      "enabled": true,
+      "backlog_events": 1,
+      "pending_delivery": {
+        "token": "D3e52cceeb4d323d7acabcaf5",
+        "from_seq": 4,
+        "through_seq": 4
+      }
+    }
+  ],
+  "disabled_consumers": [],
+  "consumer": {
+    "name": "edge",
+    "generation": 1,
+    "start_seq": 1,
+    "acked_seq": 3,
+    "enabled": true,
+    "backlog_events": 1,
+    "pending_delivery": {
+      "token": "D3e52cceeb4d323d7acabcaf5",
+      "from_seq": 4,
+      "through_seq": 4
+    }
+  },
+  "frames_retained": 3,
+  "events_retained": 4
+}

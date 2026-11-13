@@ -1,0 +1,9 @@
+{
+  "consumer": "peeker",
+  "generation": 1,
+  "start_seq": 10,
+  "acked_seq": 9,
+  "mode": "now",
+  "retention_floor": 0,
+  "tail_seq": 9
+}

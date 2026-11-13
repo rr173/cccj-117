@@ -1,0 +1,7 @@
+ok   frames
+ok   events
+ok   consumer edge
+ok   consumer other
+ok   retention floor
+ok   tail seq
+ok   pending deliveries
