@@ -1,0 +1,37 @@
+{
+  "study": "alpha",
+  "observations": [
+    {
+      "observation": "A1",
+      "person": "ann",
+      "edition": 3,
+      "display_name": "Ann Lee",
+      "measure": 12,
+      "memo": "ann-e3"
+    },
+    {
+      "observation": "A2",
+      "person": "bob",
+      "edition": 2,
+      "display_name": "Bob Kim",
+      "measure": 21,
+      "memo": "bob-e2"
+    },
+    {
+      "observation": "A3",
+      "person": "cid",
+      "edition": 1,
+      "display_name": "Cid Fox",
+      "measure": 30,
+      "memo": "cid-e1"
+    },
+    {
+      "observation": "A4",
+      "person": "ann",
+      "edition": 1,
+      "display_name": "Ann Lee",
+      "measure": 40,
+      "memo": "ann-a4"
+    }
+  ]
+}

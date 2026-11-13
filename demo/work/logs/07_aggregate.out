@@ -1,0 +1,15 @@
+{
+  "study": "alpha",
+  "groups": [
+    {
+      "group_code": "G1",
+      "persons": 2,
+      "measure_total": 73
+    },
+    {
+      "group_code": "G2",
+      "persons": 1,
+      "measure_total": 30
+    }
+  ]
+}

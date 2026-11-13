@@ -1,0 +1,21 @@
+ok   editions
+ok   barrier
+ok   withdrawals
+ok   withdrawal anomalies WV
+ok   withdrawal_bundles WV
+ok   bundles_table
+ok   file absent B000001
+ok   file absent B000002
+ok   file absent B000003
+ok   file absent B000004
+ok   file absent B000006
+ok   file absent B000007
+ok   file absent B000008
+ok   file absent B000010
+ok   tmp dir empty
+ok   residue: database tables free of withdrawn payload
+ok   residue: bundle/receipt files free of withdrawn payload
+ok   residue: untouched participant 'Bob Kim' still present
+ok   residue: untouched participant 'Lo Ren' still present
+ok   residue: zero edition rows for withdrawn persons
+checkpoint cp18: ALL CHECKS PASSED

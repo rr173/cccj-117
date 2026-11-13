@@ -1,0 +1,8 @@
+{
+  "batch_tag": "alpha-bz",
+  "status": "accepted",
+  "accepted": 1,
+  "accepted_existing": 0,
+  "withdrawn_suppressed": 1,
+  "receipt": "receipts/alpha-bz-b4c333e4.jsonl"
+}

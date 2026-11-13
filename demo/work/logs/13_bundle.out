@@ -1,0 +1,7 @@
+{
+  "status": "created",
+  "bundle_id": "B000001",
+  "study": "alpha",
+  "participants": 3,
+  "path": "bundles/B000001.json"
+}

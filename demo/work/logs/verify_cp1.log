@@ -1,0 +1,10 @@
+ok   editions
+ok   owners
+ok   projection_alpha
+ok   projection_beta
+ok   barrier
+ok   withdrawals
+ok   bundles_table
+ok   receipt alpha-b1
+ok   batches
+checkpoint cp1: ALL CHECKS PASSED

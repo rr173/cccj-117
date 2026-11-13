@@ -1,0 +1,18 @@
+{
+  "withdrawal_id": "W0",
+  "study": "alpha",
+  "state": "completed",
+  "persons": [
+    "zed"
+  ],
+  "editions_removed": 0,
+  "bundles": {
+    "pending": [],
+    "cleared": [],
+    "missing": [],
+    "refused": []
+  },
+  "anomalies": 0,
+  "created_at": "2026-11-13T21:21:38Z",
+  "updated_at": "2026-11-13T21:21:38Z"
+}

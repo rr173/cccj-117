@@ -1,0 +1,30 @@
+{
+  "study": "alpha",
+  "observation": "A1",
+  "editions": [
+    {
+      "edition": 1,
+      "person": "ann",
+      "display_name": "Ann Lee",
+      "measure": 10,
+      "memo": "ann-e1",
+      "batch_tag": "alpha-b1"
+    },
+    {
+      "edition": 2,
+      "person": "ann",
+      "display_name": "Ann Lee",
+      "measure": 11,
+      "memo": "ann-e2",
+      "batch_tag": "alpha-b2"
+    },
+    {
+      "edition": 3,
+      "person": "ann",
+      "display_name": "Ann Lee",
+      "measure": 12,
+      "memo": "ann-e3",
+      "batch_tag": "alpha-b3"
+    }
+  ]
+}

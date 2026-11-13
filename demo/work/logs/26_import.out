@@ -1,0 +1,13 @@
+{
+  "batch_tag": "alpha-b6",
+  "status": "rejected",
+  "errors": [
+    {
+      "line": 1,
+      "reason": "edition_conflict",
+      "study": "alpha",
+      "observation": "A2",
+      "edition": 1
+    }
+  ]
+}

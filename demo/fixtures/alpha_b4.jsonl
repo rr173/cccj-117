@@ -1,0 +1,4 @@
+{"study": "alpha", "person": "ann", "observation": "A1", "edition": 4, "display_name": "Ann Lee", "measure": 13, "memo": "ann-e4"}
+{"study": "alpha", "person": "bob", "observation": "A2", "edition": 3, "display_name": "Bob Kim", "measure": 22, "memo": "bob-e3"}
+{"study": "alpha", "person": "ann", "observation": "A5", "edition": 1, "display_name": "Ann Lee", "measure": 50, "memo": "ann-a5"}
+{"study": "alpha", "person": "cid", "observation": "A3", "edition": 2, "display_name": "Cid Fox", "measure": 31, "memo": "cid-e2"}

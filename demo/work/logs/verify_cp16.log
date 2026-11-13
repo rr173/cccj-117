@@ -1,0 +1,22 @@
+ok   editions
+ok   owners
+ok   projection_conc
+ok   projection_lockt
+ok   barrier
+ok   withdrawals
+ok   withdrawal_bundles W5
+ok   withdrawal_bundles W6
+ok   bundles_table
+ok   bundle_file B000005 created_at format
+ok   bundle_file B000005 content
+ok   bundle_file B000009 created_at format
+ok   bundle_file B000009 content
+ok   file absent B000001
+ok   file absent B000002
+ok   file absent B000003
+ok   file absent B000004
+ok   file absent B000006
+ok   file absent B000007
+ok   file absent B000008
+ok   tmp dir empty
+checkpoint cp16: ALL CHECKS PASSED

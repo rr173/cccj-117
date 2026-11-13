@@ -1,0 +1,15 @@
+ok   editions
+ok   owners
+ok   projection_alpha
+ok   projection_beta
+ok   barrier
+ok   withdrawals
+ok   withdrawal_bundles W0
+ok   withdrawal_bundles W1
+ok   bundles_table
+ok   bundle_file B000002 created_at format
+ok   bundle_file B000002 content
+ok   bundle_file B000003 created_at format
+ok   bundle_file B000003 content
+ok   file absent B000001
+checkpoint cp6: ALL CHECKS PASSED

@@ -1,0 +1,18 @@
+{
+  "batch_tag": "alpha-bad",
+  "status": "rejected",
+  "errors": [
+    {
+      "line": 2,
+      "reason": "invalid JSON"
+    },
+    {
+      "line": 3,
+      "reason": "field edition must be a positive integer"
+    },
+    {
+      "line": 4,
+      "reason": "field measure must be an integer"
+    }
+  ]
+}

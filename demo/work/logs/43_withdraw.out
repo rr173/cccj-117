@@ -1,0 +1,20 @@
+{
+  "withdrawal_id": "W6",
+  "study": "conc",
+  "state": "completed",
+  "persons": [
+    "quinn"
+  ],
+  "editions_removed": 1,
+  "bundles": {
+    "pending": [],
+    "cleared": [
+      "B000008"
+    ],
+    "missing": [],
+    "refused": []
+  },
+  "anomalies": 0,
+  "created_at": "2026-11-13T21:21:39Z",
+  "updated_at": "2026-11-13T21:21:39Z"
+}

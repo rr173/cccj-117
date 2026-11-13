@@ -1,0 +1,13 @@
+{
+  "study": "beta",
+  "observations": [
+    {
+      "observation": "B1",
+      "person": "ann",
+      "edition": 1,
+      "display_name": "Ann Lee",
+      "measure": 100,
+      "memo": "ann-b1"
+    }
+  ]
+}

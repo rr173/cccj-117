@@ -1,0 +1,56 @@
+{
+  "aggregates": [
+    {
+      "group_code": "G1",
+      "measure_total": 73,
+      "persons": 2
+    },
+    {
+      "group_code": "G2",
+      "measure_total": 30,
+      "persons": 1
+    }
+  ],
+  "bundle_id": "B000001",
+  "created_at": "2026-11-13T21:21:38Z",
+  "observations": [
+    {
+      "display_name": "Ann Lee",
+      "edition": 3,
+      "measure": 12,
+      "memo": "ann-e3",
+      "observation": "A1",
+      "person": "ann"
+    },
+    {
+      "display_name": "Bob Kim",
+      "edition": 2,
+      "measure": 21,
+      "memo": "bob-e2",
+      "observation": "A2",
+      "person": "bob"
+    },
+    {
+      "display_name": "Cid Fox",
+      "edition": 1,
+      "measure": 30,
+      "memo": "cid-e1",
+      "observation": "A3",
+      "person": "cid"
+    },
+    {
+      "display_name": "Ann Lee",
+      "edition": 1,
+      "measure": 40,
+      "memo": "ann-a4",
+      "observation": "A4",
+      "person": "ann"
+    }
+  ],
+  "participants": [
+    "ann",
+    "bob",
+    "cid"
+  ],
+  "study": "alpha"
+}

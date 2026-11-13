@@ -1,0 +1,8 @@
+{
+  "batch_tag": "alpha-b7",
+  "status": "accepted",
+  "accepted": 0,
+  "accepted_existing": 1,
+  "withdrawn_suppressed": 0,
+  "receipt": "receipts/alpha-b7-056975bb.jsonl"
+}

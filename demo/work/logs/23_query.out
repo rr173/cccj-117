@@ -1,0 +1,21 @@
+{
+  "study": "beta",
+  "observations": [
+    {
+      "observation": "B1",
+      "person": "ann",
+      "edition": 1,
+      "display_name": "Ann Lee",
+      "measure": 100,
+      "memo": "ann-b1"
+    },
+    {
+      "observation": "B2",
+      "person": "dan",
+      "edition": 1,
+      "display_name": "Dan Yu",
+      "measure": 200,
+      "memo": "dan-e1"
+    }
+  ]
+}

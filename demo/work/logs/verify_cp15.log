@@ -1,0 +1,14 @@
+ok   editions
+ok   projection_beta
+ok   withdrawals
+ok   withdrawal_bundles W7
+ok   bundles_table
+ok   bundle_file B000005 created_at format
+ok   bundle_file B000005 content
+ok   file absent B000001
+ok   file absent B000002
+ok   file absent B000003
+ok   file absent B000004
+ok   file absent B000006
+ok   file absent B000007
+checkpoint cp15: ALL CHECKS PASSED

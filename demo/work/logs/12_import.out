@@ -1,0 +1,13 @@
+{
+  "batch_tag": "alpha-bad2",
+  "status": "rejected",
+  "errors": [
+    {
+      "line": 1,
+      "reason": "ownership_conflict",
+      "study": "alpha",
+      "observation": "A2",
+      "person": "mallory"
+    }
+  ]
+}

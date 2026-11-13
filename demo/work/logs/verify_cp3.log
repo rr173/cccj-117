@@ -1,0 +1,7 @@
+ok   editions
+ok   owners
+ok   projection_alpha
+ok   batches
+ok   batch absent alpha-bad
+ok   batch absent alpha-bad2
+checkpoint cp3: ALL CHECKS PASSED

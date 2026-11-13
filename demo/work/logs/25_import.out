@@ -1,0 +1,9 @@
+{
+  "batch_tag": "alpha-b1",
+  "status": "duplicate",
+  "note": "batch previously received; dispositions reflect the current withdrawal registry",
+  "accepted": 2,
+  "accepted_existing": 0,
+  "withdrawn_suppressed": 2,
+  "receipt": "receipts/alpha-b1-df219bf0.jsonl"
+}

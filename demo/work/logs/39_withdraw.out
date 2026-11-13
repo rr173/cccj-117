@@ -1,0 +1,26 @@
+{
+  "withdrawals": [
+    {
+      "withdrawal_id": "W7",
+      "study": "beta",
+      "state": "editions_cleared",
+      "persons": [
+        "ann"
+      ],
+      "editions_removed": 1,
+      "bundles": {
+        "pending": [
+          "B000007"
+        ],
+        "cleared": [
+          "B000006"
+        ],
+        "missing": [],
+        "refused": []
+      },
+      "anomalies": 0,
+      "created_at": "2026-11-13T21:21:39Z",
+      "updated_at": "2026-11-13T21:21:39Z"
+    }
+  ]
+}

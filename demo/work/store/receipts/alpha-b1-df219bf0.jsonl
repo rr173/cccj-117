@@ -1,0 +1,4 @@
+{"line": 1, "study": "alpha", "observation": "A1", "person": "ann", "edition": 1, "disposition": "withdrawn_suppressed"}
+{"line": 2, "study": "alpha", "observation": "A2", "person": "bob", "edition": 1, "disposition": "accepted"}
+{"line": 3, "study": "alpha", "observation": "A3", "person": "cid", "edition": 1, "disposition": "accepted"}
+{"line": 4, "study": "alpha", "observation": "A4", "person": "ann", "edition": 1, "disposition": "withdrawn_suppressed"}

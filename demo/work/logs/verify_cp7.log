@@ -1,0 +1,10 @@
+ok   editions
+ok   owners
+ok   projection_alpha
+ok   barrier
+ok   receipt alpha-b1
+ok   receipt alpha-b4
+ok   receipt alpha-b7
+ok   batches
+ok   batch absent alpha-b6
+checkpoint cp7: ALL CHECKS PASSED

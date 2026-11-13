@@ -1,0 +1,9 @@
+ok   editions
+ok   bundles_table
+ok   bundle_file B000001 created_at format
+ok   bundle_file B000001 content
+ok   bundle_file B000002 created_at format
+ok   bundle_file B000002 content
+ok   bundle_file B000003 created_at format
+ok   bundle_file B000003 content
+checkpoint cp4: ALL CHECKS PASSED

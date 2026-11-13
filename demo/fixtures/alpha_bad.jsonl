@@ -1,0 +1,4 @@
+{"study": "alpha", "person": "bob", "observation": "A9", "edition": 1, "display_name": "Bob Kim", "measure": 1, "memo": "ok"}
+this is not json at all
+{"study": "alpha", "person": "bob", "observation": "A9", "edition": 0, "display_name": "Bob Kim", "measure": 1, "memo": "ok"}
+{"study": "alpha", "person": "bob", "observation": "A9", "edition": 1, "display_name": "Bob Kim", "measure": "x", "memo": "ok"}

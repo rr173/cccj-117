@@ -1,0 +1,9 @@
+{
+  "batch_tag": "alpha-b1",
+  "status": "rejected",
+  "errors": [
+    {
+      "reason": "batch_tag already used with different content"
+    }
+  ]
+}
