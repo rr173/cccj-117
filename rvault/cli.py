@@ -31,6 +31,9 @@
   rvault --store S lineage upstream --node JSON [--max-depth N]
   rvault --store S lineage downstream --node JSON [--max-depth N]
   rvault --store S lineage jobs
+  rvault --store S mail receive --input FILE.eml [--chunk-size N]
+  rvault --store S mail resume --input FILE.eml [--chunk-size N]
+  rvault --store S mail status [--message DIGEST]
 
 Exit codes: 0 ok; 2 rejected input / conflicting credential, withdrawal, ack,
 trim, lineage or contract registration; 3 bundle aborted because a withdrawal
@@ -49,6 +52,7 @@ from . import changefeed as feed_mod
 from . import contracts as contracts_mod
 from . import intake as intake_mod
 from . import lineage as lineage_mod
+from . import mail as mail_mod
 from . import query as query_mod
 from . import withdraw as withdraw_mod
 from .store import Store, reconcile
@@ -198,6 +202,20 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--max-depth", type=int, default=None,
                     help="maximum hops (default: unlimited)")
     lsub.add_parser("jobs", help="list recorded processing jobs")
+
+    m = sub.add_parser("mail", help="offline .eml intake channel")
+    msub = m.add_subparsers(dest="mcmd", required=True)
+    sp = msub.add_parser("receive", help="preflight one .eml message, then "
+                         "import its manifest's batches (idempotent)")
+    sp.add_argument("--input", required=True, help="raw .eml file")
+    sp.add_argument("--chunk-size", type=int, default=mail_mod.DEFAULT_CHUNK,
+                    help="read chunk size in bytes (default: 65536)")
+    sp = msub.add_parser("resume", help="continue an interrupted message")
+    sp.add_argument("--input", required=True, help="raw .eml file")
+    sp.add_argument("--chunk-size", type=int, default=mail_mod.DEFAULT_CHUNK,
+                    help="read chunk size in bytes (default: 65536)")
+    sp = msub.add_parser("status", help="mail processing records")
+    sp.add_argument("--message", help="message digest (default: all messages)")
     return p
 
 
@@ -347,6 +365,23 @@ def main(argv=None) -> int:
 
     if args.cmd == "lineage":
         return _lineage_command(store, args)
+
+    if args.cmd == "mail":
+        if args.mcmd in ("receive", "resume"):
+            code, obj = mail_mod.receive(
+                store, args.input, chunk_size=args.chunk_size,
+                require_existing=(args.mcmd == "resume"))
+            _print(obj)
+            return code
+        if args.mcmd == "status":
+            obj = mail_mod.status(store, args.message)
+            if obj is None:
+                print(json.dumps({"error": "unknown message",
+                                  "message_digest": args.message}),
+                      file=sys.stderr)
+                return 4
+            _print(obj)
+            return 0
 
     return 1
 

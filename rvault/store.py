@@ -82,7 +82,9 @@ def reconcile(store: Store) -> dict:
       their half-placed files removed (a bundle is only ever visible once it
       reaches state 'active')
     - stale scratch files in tmp/ are removed (spool/receipt files whose
-      owner pid is gone, bundle tmp files with no live 'registering' row)
+      owner pid is gone, bundle tmp files with no live 'registering' row,
+      decoded mail attachments whose owner pid is gone; mail temp files are
+      never evidence of receipt - the durable record lives in ml_* tables)
     """
     result = {"aborted_bundles": [], "tmp_removed": 0}
     if not os.path.isdir(store.root):
@@ -118,6 +120,8 @@ def reconcile(store: Store) -> dict:
             elif name.startswith("intake.") and name.endswith(".spool"):
                 remove = _stale_pid_file(name)
             elif name.startswith("receipt.") and name.endswith(".jsonl"):
+                remove = _stale_pid_file(name)
+            elif name.startswith("mail.") and name.endswith(".part"):
                 remove = _stale_pid_file(name)
             if remove:
                 try:

@@ -50,6 +50,17 @@ ct_batches              : batch_tag -> the protocol (legacy | contract) and
                           contract version it was admitted under, so the same
                           credential cannot silently switch protocols or
                           contract versions
+
+Mail-channel tables (see mail.py):
+ml_messages             : one durable processing record per received message,
+                          keyed by the sha256 of the raw message bytes, with
+                          the manifest part position, per-state progress
+                          (importing | done | rejected) and preflight error
+                          categories (identifiers only - never payload)
+ml_batches              : (message_digest, manifest seq) -> real batch_tag,
+                          content_id, data-part position, declared digest and
+                          the per-batch intake outcome (pending | accepted |
+                          duplicate | rejected) with an identifier-only detail
 """
 from __future__ import annotations
 
@@ -256,6 +267,31 @@ CREATE TABLE IF NOT EXISTS ct_batches(
   material_type TEXT,
   contract_version INTEGER,
   protocol TEXT NOT NULL            -- legacy | contract | contract_branch
+);
+CREATE TABLE IF NOT EXISTS ml_messages(
+  message_digest TEXT PRIMARY KEY,  -- sha256 of the raw message bytes
+  state TEXT NOT NULL,              -- importing | done | rejected
+  received_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  manifest_part TEXT,               -- dotted position of the manifest part
+  part_count INTEGER NOT NULL,
+  batch_count INTEGER NOT NULL,
+  accepted_count INTEGER NOT NULL DEFAULT 0,
+  duplicate_count INTEGER NOT NULL DEFAULT 0,
+  rejected_count INTEGER NOT NULL DEFAULT 0,
+  errors_json TEXT                  -- preflight errors (identifiers only)
+);
+CREATE TABLE IF NOT EXISTS ml_batches(
+  message_digest TEXT NOT NULL,
+  seq INTEGER NOT NULL,             -- 1-based manifest order
+  batch_tag TEXT NOT NULL,
+  content_id TEXT NOT NULL,
+  part TEXT NOT NULL,               -- dotted position of the data part
+  sha256 TEXT NOT NULL,             -- manifest-declared digest of decoded bytes
+  status TEXT NOT NULL,             -- pending | accepted | duplicate | rejected
+  detail_json TEXT,                 -- intake summary (identifiers only)
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY(message_digest, seq)
 );
 """
 

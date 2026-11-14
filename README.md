@@ -694,3 +694,106 @@ python3 demo/run_contract_demo.py        # 10 个阶段，全部工件在临时�
 | 8 | 两个进程竞争同一后继版本：一个完整版本胜出，败者 `content_conflict`，字段行数只属于完整版本 |
 | 9 | 原有**无契约**导入照旧（固定字段、整数 measure、回执无契约字段），变更通知照旧 |
 | 10 | 撤回与通知仍可用：契约数据被撤回擦除、契约元数据不动、remove 后不再 refresh、通知不含载荷 |
+
+## 12. 离线邮件来件通道（mail）
+
+数据接收组收到的是上游导出的原始邮件文件。本子系统把 `.eml` 文件作为
+**离线**来件通道：读取原始 MIME 字节流，找到清单真正指向的附件，完整
+解码后交给**既有批次接收入口**（`import` 的同一 `import_batch` 路径）。
+它不连接邮箱、不发信、不提供邮件界面，也**不另开一套**绕过批次凭据、
+撤回屏障或通知语义的写库方法。
+
+```
+rvault --store S mail receive --input FILE.eml [--chunk-size N]
+rvault --store S mail resume  --input FILE.eml [--chunk-size N]
+rvault --store S mail status  [--message DIGEST]
+```
+
+### 12.1 邮件约定
+
+- **清单**是 Content-Type 为 `application/vnd.rvault-batches+json` 的单独
+  叶子部分，整封邮件**恰好一份**。内容为
+  `{"batches": [{"batch_tag": ..., "content_id": ..., "sha256": ...}, ...]}`；
+  `sha256` 针对**传输解码之后**的原始附件字节（64 位小写十六进制）。
+- **数据附件**的 Content-Type 为 `application/x-ndjson`，解码后的内容遵守
+  原有七字段观测协议（与 `import` 的旧协议逐字节一致）。
+- 清单与附件只靠 **Content-ID** 关联——绝不靠文件名或附件排列顺序。
+- 容许嵌套的 `multipart/mixed` 与 `multipart/related`；未被清单引用的
+  说明文字和图片**忽略**；正文里的 JSON 示例只是说明文字，不是清单；
+  `message/rfc822` 部分视为不透明载荷，**不递归**捡出另一封信的批次。
+- 传输编码范围：`base64`、`quoted-printable`、`7bit`、`8bit`、`binary`。
+  解码**字节保真**：JSONL 的 CRLF、非 ASCII 文本、文件末尾有无换行都
+  原样保留；邮件从不被先统一当文本重写。折行 base64 与 QP 软换行按规则
+  消解；分隔线可能被读块拆开、正文里与边界同前缀的行**不是**分隔线。
+- **文件名只作元数据**：像 `../../data.jsonl` 这样的名字不得决定宿主
+  写入路径（解码产物一律落在接收器自己的 `tmp/` 里，由系统命名）。
+
+### 12.2 两阶段与崩溃续办
+
+1. **预检（整封邮件，先于任何业务接收）**：流式解析结构、逐附件解码到
+   受管临时区并边读边算摘要，然后判明——清单缺失/重复/损坏、Content-ID
+   重复、清单引用不到附件或指向非数据部分、同一 batch_tag 指向两份载荷、
+   编码非法/不支持、multipart 未闭合、摘要不符。**任一问题即整封拒绝，
+   一个批次都不会入库**——最后一个附件损坏时，前面的好附件也尚未入库。
+2. **导入**：按清单顺序逐附件调用既有 `import_batch`（每个附件一个独立
+   的既有批次事务，**不**把多份附件合成一个事务）。某份附件观测行不合法
+   时**这一批**整批拒绝，之前已成功的批次保留，后面的批次继续；总结果
+   逐批列出 `accepted` / `duplicate` / `rejected`，邮件整体结果
+   （`received` / `partial` / `rejected`）不会掩盖一份被拒的批次。
+
+**持久处理记录**以原始邮件字节摘要为身份（`ml_messages` / `ml_batches`
+表，随 `Store.ensure()` 自动建表），关联清单位置、真实 batch_tag 与接收
+结果。相同邮件重新处理是**续办**：已终结的批次不再重导，待办批次继续；
+不会新增观测、修订或通知。若进程在**业务批次已提交、处理记录尚未更新**
+处被强退，续办时靠原 batch_tag 凭据重新确认（intake 返回 `duplicate`），
+这一批不会被再次当新数据计入。`mail resume` 与 `mail receive` 走同一
+管线，只是要求邮件已有处理记录（否则退出码 4）。
+
+### 12.3 临时区、内存与诊断
+
+- 解码附件只落在 store 的 `tmp/`（`mail.<pid>.<n>.part`）；正常结束与
+  已判定的拒绝都会清理；意外退出留下的文件由下次运行的 `reconcile`
+  按属主 pid 回收——临时文件**永不**作为已接收凭据。
+- 邮件可大于进程可用内存：解析、解码、摘要全部流式进行，不整封读入、
+  不组装内存 MIME 对象树。实测 19.7 MB 邮件（12 万行观测）接收峰值
+  RSS 约 20 MB。
+- 诊断只展示邮件摘要、部分位置、批次号与错误类别，**不**复制正文、
+  姓名、测量值或备注。部分编号：邮件本身为 `0`，顶层部分为 `1,2,...`，
+  嵌套部分点分（`2.1`）。
+
+预检错误类别：`manifest_missing` / `manifest_duplicate` /
+`manifest_invalid` / `manifest_too_large` / `content_id_duplicate` /
+`reference_unresolved` / `reference_ambiguous` /
+`referenced_part_not_data` / `batch_tag_duplicate` / `digest_mismatch` /
+`unsupported_transfer_encoding` / `invalid_transfer_encoding` /
+`unterminated_multipart` / `invalid_multipart_boundary` /
+`headers_too_large` / `structure_too_deep` / `too_many_parts` /
+`message_changed`。
+
+退出码沿用 §9：全部批次被接收（含幂等 duplicate）为 0；预检拒绝或任一
+批次被拒为 2；邮件不可读或 `resume`/`status` 遇到未知邮件摘要为 4。
+
+### 12.4 演练与独立校验
+
+```
+python3 demo/run_mail_demo.py      # 全部工件在临时目录，启动时打印路径
+```
+
+演练**直接生成真实原始 MIME 字节**（不用事先拆好的附件假装邮件）：
+`demo/expected_mail.py` 是手工期望值（载荷字面量、由字面量算出的摘要、
+期望库内元组与通知序列）；`demo/verify_mail.py` 用自己的 SQL 直接读回
+`editions` / `batches` / `cf_events` / `ml_messages` / `ml_batches` 逐字段
+比对。逐条复跑说明与预先列好的期望结果见 `demo/MAIL_DEMO.md`。
+
+| 阶段 | 内容 |
+|---|---|
+| 1 | 嵌套邮件：说明文字（内含 JSON 示例与边界相似行）+ multipart/related 内嵌图片 + base64 附件（CRLF、非 ASCII、末尾无换行）+ QP 附件（软换行、LF、末尾有换行）+ 清单；核对解码字节摘要、真实库内观测与通知数量（2 帧 4 事件）、临时区清理 |
+| 2 | 同一邮件以 **7 字节读块**接收（分隔线、base64 四元组、QP 软换行分别跨块），与正常块大小的批次摘要、editions、通知、处理记录逐项相同 |
+| 3 | 十种预检拒绝：摘要不符、Content-ID 歧义、缺结束边界、声明不支持的编码、非法 base64/QP、message/rfc822 不递归、清单重复、清单损坏、同批次号两份载荷、引用不到附件；诊断不含载荷值；editions 为空 |
+| 4 | 越界文件名 `../../data.jsonl`：正常接收，宿主文件系统不出现该名字的文件 |
+| 5 | "首批合法、次批行错、末批合法"：部分接收回执 accepted/rejected/accepted，库内只有第 1、3 批；重放同一邮件只回读记录 |
+| 6 | 一批已落库但办理记录未更新处 SIGKILL；续办后该批经原凭据确认为 duplicate，无重复数据或通知，后续附件完成；崩溃遗留临时文件被回收 |
+| 7 | 邮件通道走既有撤回屏障：屏障内参与者的行被抑制（`withdrawn_suppressed`）且不产生通知，其余行正常入列 |
+| 8 | 大附件邮件（19.7 MB / 12 万行）：报告输入规模与实测峰值内存（约 20 MB） |
+| 9 | `mail status` 单封/列表/未知摘要（退出码 4）；`resume` 未知邮件（退出码 4） |
+
