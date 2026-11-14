@@ -10,6 +10,11 @@ Implements:
   - nested study-table preparation: a declarative plan projected by a streaming
     ijson event parser into an independent relational output database, with a
     crash-safe per-root transaction boundary and resumable progress
+  - an independent byte-pair (BPE) vocabulary learning/encoding subsystem with
+    its own SQLite training database: deterministic disk-backed merge state,
+    local (hit-only) per-round updates, crash-redo rounds, flock-based single
+    advancer, and digest-bound streaming encode/decode that is lossless but
+    makes no compression-rate guarantee
 """
 
 __version__ = "1.0.0"

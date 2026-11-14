@@ -43,6 +43,15 @@
                   [--root N] [--limit N]
   rvault --store S nested children --database DB --table T --parent ROW_ID
                   [--limit N]
+  rvault bpe train  --database DB --input FILE --max-merges N --min-count N
+                    [--lock FILE]
+  rvault bpe resume --database DB [--input FILE] [--max-merges N]
+                    [--min-count N] [--lock FILE]
+  rvault bpe status  --database DB [--lock FILE]
+  rvault bpe rounds  --database DB [--lock FILE]
+  rvault bpe vocab   --database DB [--output FILE] [--lock FILE]
+  rvault bpe encode  --vocab FILE --input FILE --output FILE
+  rvault bpe decode  --vocab FILE --input FILE --output FILE
 
 Exit codes: 0 ok; 2 rejected input / conflicting credential, withdrawal, ack,
 trim, lineage or contract registration; 3 bundle aborted because a withdrawal
@@ -55,9 +64,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sqlite3
 import sys
 
 from . import bundles as bundles_mod
+from . import bpe as bpe_mod
 from . import changefeed as feed_mod
 from . import contracts as contracts_mod
 from . import intake as intake_mod
@@ -93,7 +104,8 @@ def _load_groups(path):
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="rvault",
                                 description="local research data intake and withdrawal processing")
-    p.add_argument("--store", required=True, help="managed store directory")
+    p.add_argument("--store", help="managed store directory (not required by "
+                                   "the independent bpe subsystem)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("init", help="create the store layout")
@@ -273,11 +285,55 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--table", required=True)
     sp.add_argument("--parent", required=True)
     sp.add_argument("--limit", type=int)
+
+    bp = sub.add_parser("bpe", help="independent byte-pair vocabulary "
+                                    "learning and encoding")
+    bpsub = bp.add_subparsers(dest="bpcmd", required=True)
+    sp = bpsub.add_parser("train", help="create a training database and run "
+                                        "merge rounds")
+    sp.add_argument("--database", required=True, help="new BPE training "
+                                                       "database path")
+    sp.add_argument("--input", required=True, help="JSONL: id/weight/text")
+    sp.add_argument("--max-merges", type=int, required=True)
+    sp.add_argument("--min-count", type=int, required=True)
+    sp.add_argument("--lock", help="lock file (default: <database>.lock)")
+    sp = bpsub.add_parser("resume", help="continue an existing training "
+                                          "database (also crash recovery)")
+    sp.add_argument("--database", required=True)
+    sp.add_argument("--input", help="same corpus file; checked by digest")
+    sp.add_argument("--max-merges", type=int)
+    sp.add_argument("--min-count", type=int)
+    sp.add_argument("--lock")
+    sp = bpsub.add_parser("status", help="training identity and counters")
+    sp.add_argument("--database", required=True)
+    sp.add_argument("--lock")
+    sp = bpsub.add_parser("rounds", help="per-round statistics")
+    sp.add_argument("--database", required=True)
+    sp.add_argument("--lock")
+    sp = bpsub.add_parser("vocab", help="export the digest-bound vocabulary")
+    sp.add_argument("--database", required=True)
+    sp.add_argument("--output", default="-", help="vocab JSON file "
+                                                   "(default: stdout)")
+    sp.add_argument("--lock")
+    sp = bpsub.add_parser("encode", help="stream-encode id/text JSONL")
+    sp.add_argument("--vocab", required=True)
+    sp.add_argument("--input", required=True)
+    sp.add_argument("--output", required=True)
+    sp = bpsub.add_parser("decode", help="stream-decode an encoded file")
+    sp.add_argument("--vocab", required=True)
+    sp.add_argument("--input", required=True)
+    sp.add_argument("--output", required=True)
     return p
 
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
+    if args.cmd == "bpe":
+        return _bpe_command(args)
+    if not args.store:
+        print(json.dumps({"error": "--store is required for this command"}),
+              file=sys.stderr)
+        return 2
     store = Store(args.store)
     store.ensure()
 
@@ -686,4 +742,56 @@ def _lineage_command(store, args) -> int:
     except lineage_mod.LineageError as e:
         print(json.dumps(e.as_dict(), ensure_ascii=False), file=sys.stderr)
         return e.exit_code
+    return 1
+
+
+def _bpe_command(args) -> int:
+    cmd = args.bpcmd
+    try:
+        if cmd == "train":
+            obj = bpe_mod.train(args.database, args.input,
+                                args.max_merges, args.min_count,
+                                lock_path=args.lock)
+            _print(obj)
+            return 0
+        if cmd == "resume":
+            obj = bpe_mod.resume(args.database, args.input,
+                                 args.max_merges, args.min_count,
+                                 lock_path=args.lock)
+            _print(obj)
+            return 0
+        if cmd == "status":
+            _print(bpe_mod.status(args.database, lock_path=args.lock))
+            return 0
+        if cmd == "rounds":
+            _print({"rounds": bpe_mod.round_rows(
+                args.database, lock_path=args.lock)})
+            return 0
+        if cmd == "vocab":
+            doc = bpe_mod.vocab_document(args.database, lock_path=args.lock)
+            text = json.dumps(doc, ensure_ascii=False, indent=2)
+            if args.output == "-":
+                print(text)
+            else:
+                tmp = args.output + ".tmp.%d" % os.getpid()
+                with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+                    f.write(text)
+                os.replace(tmp, args.output)
+                _print({"status": "vocab_written", "path": os.path.abspath(
+                    args.output), "vocab_digest": doc["vocab_digest"]})
+            return 0
+        if cmd == "encode":
+            _print(bpe_mod.encode_file(args.vocab, args.input, args.output))
+            return 0
+        if cmd == "decode":
+            _print(bpe_mod.decode_file(args.vocab, args.input, args.output))
+            return 0
+    except bpe_mod.BpeError as e:
+        print(json.dumps(e.as_dict(), ensure_ascii=False), file=sys.stderr)
+        return e.exit_code
+    except sqlite3.DatabaseError as e:
+        print(json.dumps({"code": "database_unreadable",
+                          "error": "database is not readable: %s" % e}),
+              file=sys.stderr)
+        return 5
     return 1

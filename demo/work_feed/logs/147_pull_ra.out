@@ -1,11 +1,11 @@
-START delivery=Dc564be3019ed71041e628fd9 from=6 through=8 target=100 frames=3 head=8 events=3 empty=0 replay=0
-FRAME id=5 index=1 of=3 ts=2026-11-14T14:37:04Z start=6 end=6 events=1
+START delivery=D75db49bcb409ca04f4c9df26 from=6 through=8 target=100 frames=3 head=8 events=3 empty=0 replay=0
+FRAME id=5 index=1 of=3 ts=2026-11-14T20:26:11Z start=6 end=6 events=1
 EVENT seq=6 frame=5 ordinal=1 op=refresh study=s1 observation=o4
 ENDFRAME id=5 events=1 first=6 last=6
-FRAME id=6 index=2 of=3 ts=2026-11-14T14:37:05Z start=7 end=7 events=1
+FRAME id=6 index=2 of=3 ts=2026-11-14T20:26:12Z start=7 end=7 events=1
 EVENT seq=7 frame=6 ordinal=1 op=refresh study=s1 observation=o5
 ENDFRAME id=6 events=1 first=7 last=7
-FRAME id=7 index=3 of=3 ts=2026-11-14T14:37:05Z start=8 end=8 events=1
+FRAME id=7 index=3 of=3 ts=2026-11-14T20:26:12Z start=8 end=8 events=1
 EVENT seq=8 frame=7 ordinal=1 op=refresh study=s1 observation=o6
 ENDFRAME id=7 events=1 first=8 last=8
 END events=3 frames=3 empty=0

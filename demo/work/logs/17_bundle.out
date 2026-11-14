@@ -4,19 +4,19 @@
       "bundle_id": "B000001",
       "study": "alpha",
       "state": "active",
-      "created_at": "2026-11-14T14:36:31Z"
+      "created_at": "2026-11-14T20:25:41Z"
     },
     {
       "bundle_id": "B000002",
       "study": "beta",
       "state": "active",
-      "created_at": "2026-11-14T14:36:31Z"
+      "created_at": "2026-11-14T20:25:41Z"
     },
     {
       "bundle_id": "B000003",
       "study": "beta",
       "state": "active",
-      "created_at": "2026-11-14T14:36:31Z"
+      "created_at": "2026-11-14T20:25:41Z"
     }
   ]
 }
