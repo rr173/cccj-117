@@ -489,3 +489,208 @@ PYTHONPATH=. python3 -m rvault --store $S lineage downstream \
 JSON 错误码：`unknown_revision` / `revision_withdrawn` /
 `output_already_claimed` / `leaf_conflicts_with_derived` / `job_conflict` /
 `self_dependency` / `cycle_detected` / `invalid_declaration`）。
+
+## 11. 版本化输入契约（contract）
+
+上游单位对同一类资料使用的字段名、类型和版本并不一致。本子系统登记
+"**上游承诺送什么形状的数据**"：按 `(提供方, 资料类型)` 维护一条版本化契约，
+审查版本变更，并让导入在收件前明确选版本。它**不**负责撤回资料、通知索引、
+登记加工血缘，也**不**自动改写来件——契约只做校验与可选的默认值补齐。
+
+```
+rvault --store S contract register --provider P --material-type M \
+        --version N --fields FILE [--predecessor N] [--compatibility compatible|branch]
+rvault --store S contract compare  --provider P --material-type M --against N --fields FILE
+rvault --store S contract show     --provider P --material-type M --version N
+rvault --store S contract list     [--provider P] [--material-type M]
+rvault --store S import --batch-tag T [--input FILE] \
+        [--provider P --material-type M --contract-version N]
+```
+
+### 11.1 字段定义
+
+`--fields` 是 JSON：`{"fields": [ ... ]}`，每项：
+
+| 键 | 含义 |
+|---|---|
+| `name` | 提供方送来的字段名，**非空字符串**，同一版本内唯一 |
+| `type` | `string` / `integer` / `number` / `boolean` |
+| `required` | 是否必需（`required` 与 `default` 不可同时出现） |
+| `nullable` | 显式 `null` 是否合法 |
+| `default` | 可选默认值；**必须非 null 且与 `type` 匹配** |
+| `target` | 该字段映射到的规范导入字段（`study/person/observation/edition/display_name/measure/memo`）；契约里字段名可以和规范名完全不同，按 `target` 对应 |
+
+- 提供方标识、资料类型、字段名都遵守非空字符串规则；`target` 不得重复。
+- 一份用于导入的契约必须**恰好映射全部七个规范字段**。规范字段的类型由既有
+  协议固定，唯一例外是 `measure`：可声明为 `integer` 或 `number`（兼容升级
+  允许把整数拓宽为数值）。
+- 映射到规范字段的字段必须要么 `required`，要么带 `default`；若 `nullable`
+  则必须带 `default`（合法 `null` 要能落到一个具体存储值）。契约**不改写**
+  已投递的数值——默认值只用于补齐"没送"或"合法 null"的字段。
+
+### 11.2 发布与不可改写
+
+- 每个 `(提供方, 资料类型, 版本)` **一经发布不可改写**。完全相同内容的
+  重送返回 `status: "duplicate"`（幂等确认，不新增行）；同版本不同内容返回
+  退出码 2 与 `content_conflict`。
+- 首版必须是版本 1、无前版、声明为 `initial`。后续版本必须恰好等于
+  `max + 1`（跳号/复用 ⇒ `version_gap`），必须用 `--predecessor` 指明
+  **同一 (提供方, 资料类型) 下已存在**的前版（缺失 ⇒ `predecessor_required`
+  / `unknown_predecessor`）。
+- 前版指针图会从 `predecessor` 逐级回走并带访问集合；自指或形成环 ⇒
+  `cycle_detected`。所有校验与写入在**同一个 `BEGIN IMMEDIATE` 事务**内完成，
+  被拒的注册不留半条版本记录。
+- 并发注册同一后继版本时，`BEGIN IMMEDIATE` 写锁 + 主键 `(provider,
+  material_type, version)` 保证后来者只能看到一个已提交的版本：要么成为
+  同一版本（内容相同则幂等 `duplicate`、不同则 `content_conflict`），要么
+  在编号规则前被拒；不会出现两条版本记录或半条记录（见 §11.6 阶段 8）。
+
+### 11.3 兼容声明与变更清单
+
+每次注册都会与**指定的前版**逐字段比较，生成确定性的变更清单（按
+`(字段, 变更种类)` 排序），随版本一起保存，可经 `show` 复查；`compare` 用
+同一算法在发布前独立复算。变更种类：
+
+| 种类 | `compatible` | 说明 |
+|---|---|---|
+| `field_defined` / `field_added` | 新增可选且带非空默认值的字段 ⇒ true；增加必需字段 ⇒ false |
+| `field_removed` | false |
+| `nullable_relaxed` | true（放宽空值限制） |
+| `nullable_tightened` | false（收紧空值） |
+| `type_widened` | true（`integer → number`） |
+| `type_narrowed` / `type_changed` | false |
+| `required_changed` | false |
+| `default_added` / `default_removed` / `default_changed` | false |
+| `target_changed` | false（改变字段含义） |
+
+- `--compatibility compatible`（兼容升级）**只允许**上表标 true 的变更；
+  只要清单里有一个 false 项就整次拒绝（`incompatible_change`），并在错误
+  载荷里附完整变更清单——**不能伪装成兼容升级**。
+- `--compatibility branch`（新分支）可以包含不兼容变更，但仍须引用存在的
+  前版，且存储的兼容声明如实记为 `branch`。`compare` 输出的
+  `classification` 为 `compatible` / `branch_required` / `no_change`。
+- 首版省略 `--compatibility`，或显式写 `initial` 均可。
+
+### 11.4 带契约的导入
+
+`import` 同时给出 `--provider/--material-type/--contract-version` 时：
+
+- 按**指定的这一版**逐行检查，绝不悄悄改用最新版；版本不存在 ⇒ 整批拒绝，
+  退出码 **4**，错误码 `unknown_contract_version`（并给出该契约线的
+  `latest`）。
+- 逐行拒绝类别（诊断含 `line`、`field`、`reason`，**不含** display_name /
+  measure / memo 的值）：`unknown_field`、`missing_required_field`、
+  `type_mismatch`、`null_not_allowed`、`value_out_of_range`（规范字段域规则，
+  例如 `edition` 必须为正整数）、`line_not_object`；契约里存储的默认值若
+  不符合自身约束，该行报 `invalid_default`（不会写入域外值）。
+- 任一行不合法 ⇒ **整批**不进入观测库：不写 editions、不写 batches、
+  不生成回执文件、不产生任何变更通知；诊断逐处给出批次行号、字段名和类别。
+- 合法行的可选字段按契约默认值补齐（显式 `null` 且 `nullable` 时落默认值），
+  然后交给**既有资料接收逻辑**（同一 `_apply_obj` 路径）。因此：同一业务
+  值按原规则保留，`accepted` / `accepted_existing` / `withdrawn_suppressed`
+  / 归属冲突 / edition 冲突 / 幂等 batch_tag / 通知语义全部与旧协议一致。
+- 批次凭据与协议/版本一起记入 `ct_batches`（同一事务）。用过的 batch_tag
+  若改协议或改契约版本重送，即使字节相同也拒绝，凭据不会悄悄切换协议。
+
+**旧命令不变**：不带任何契约选择器时，`import` 继续走原来的固定字段协议，
+行为、回执、通知逐字节一致；`ct_batches` 记 `protocol='legacy'`。
+
+### 11.5 手算小例子
+
+两份提供方、不同字段名与类型，再各加一个兼容版本和一条新分支：
+
+```sh
+S=/tmp/ct && PYTHONPATH=. python3 -m rvault --store $S init
+# 提供方 labA，资料类型 obs：字段名与规范名不同
+cat > /tmp/labA_v1.json <<'EOF'
+{"fields":[
+ {"name":"study","type":"string","required":true,"nullable":false,"target":"study"},
+ {"name":"person","type":"string","required":true,"nullable":false,"target":"person"},
+ {"name":"obs_id","type":"string","required":true,"nullable":false,"target":"observation"},
+ {"name":"rev","type":"integer","required":true,"nullable":false,"target":"edition"},
+ {"name":"label","type":"string","required":true,"nullable":false,"target":"display_name"},
+ {"name":"value","type":"integer","required":true,"nullable":false,"target":"measure"},
+ {"name":"note","type":"string","required":false,"nullable":false,"default":"","target":"memo"}]}
+EOF
+cat > /tmp/labB_v1.json <<'EOF'
+{"fields":[
+ {"name":"study","type":"string","required":true,"nullable":false,"target":"study"},
+ {"name":"subject","type":"string","required":true,"nullable":false,"target":"person"},
+ {"name":"sample","type":"string","required":true,"nullable":false,"target":"observation"},
+ {"name":"attempt","type":"integer","required":true,"nullable":false,"target":"edition"},
+ {"name":"title","type":"string","required":true,"nullable":false,"target":"display_name"},
+ {"name":"reading","type":"integer","required":true,"nullable":false,"target":"measure"},
+ {"name":"remark","type":"string","required":false,"nullable":false,"default":"","target":"memo"},
+ {"name":"verified","type":"boolean","required":false,"nullable":false,"default":false},
+ {"name":"batch","type":"integer","required":false,"nullable":false,"default":0}]}
+EOF
+PYTHONPATH=. python3 -m rvault --store $S contract register --provider labA --material-type obs --version 1 --fields /tmp/labA_v1.json
+PYTHONPATH=. python3 -m rvault --store $S contract register --provider labB --material-type measurement --version 1 --fields /tmp/labB_v1.json
+# 兼容升级：加可选 site（默认 "unknown"）、放宽 note 空值、把 value 拓宽为 number
+cat > /tmp/labA_v2.json <<'EOF'
+{"fields":[
+ {"name":"study","type":"string","required":true,"nullable":false,"target":"study"},
+ {"name":"person","type":"string","required":true,"nullable":false,"target":"person"},
+ {"name":"obs_id","type":"string","required":true,"nullable":false,"target":"observation"},
+ {"name":"rev","type":"integer","required":true,"nullable":false,"target":"edition"},
+ {"name":"label","type":"string","required":true,"nullable":false,"target":"display_name"},
+ {"name":"value","type":"number","required":true,"nullable":false,"target":"measure"},
+ {"name":"note","type":"string","required":false,"nullable":true,"default":"","target":"memo"},
+ {"name":"site","type":"string","required":false,"nullable":false,"default":"unknown"}]}
+EOF
+PYTHONPATH=. python3 -m rvault --store $S contract compare  --provider labA --material-type obs --against 1 --fields /tmp/labA_v2.json
+PYTHONPATH=. python3 -m rvault --store $S contract register --provider labA --material-type obs --version 2 --predecessor 1 --compatibility compatible --fields /tmp/labA_v2.json
+# 新分支：删 note、加必需 flag —— 必须显式 branch
+cat > /tmp/labA_v3.json <<'EOF'
+{"fields":[
+ {"name":"study","type":"string","required":true,"nullable":false,"target":"study"},
+ {"name":"person","type":"string","required":true,"nullable":false,"target":"person"},
+ {"name":"obs_id","type":"string","required":true,"nullable":false,"target":"observation"},
+ {"name":"rev","type":"integer","required":true,"nullable":false,"target":"edition"},
+ {"name":"label","type":"string","required":true,"nullable":false,"target":"display_name"},
+ {"name":"value","type":"number","required":true,"nullable":false,"target":"measure"},
+ {"name":"flag","type":"string","required":true,"nullable":false,"target":"memo"},
+ {"name":"site","type":"string","required":false,"nullable":false,"default":"unknown"}]}
+EOF
+PYTHONPATH=. python3 -m rvault --store $S contract register --provider labA --material-type obs --version 3 --predecessor 2 --compatibility branch --fields /tmp/labA_v3.json
+# 带契约导入：note 省略→补默认；value 可小数
+printf '%s\n' \
+ '{"study":"s1","person":"p1","obs_id":"o1","rev":1,"label":"N","value":10}' \
+ '{"study":"s1","person":"p1","obs_id":"o2","rev":1,"label":"N","value":10.5,"note":null}' \
+ | PYTHONPATH=. python3 -m rvault --store $S import --batch-tag b1 \
+     --provider labA --material-type obs --contract-version 2
+PYTHONPATH=. python3 -m rvault --store $S query --study s1
+```
+
+手算答案：v2 相对 v1 的变更清单恰为三项——`note nullable_relaxed`、
+`site field_added`、`value type_widened`，`classification=compatible`；
+v3 相对 v2 为 `flag field_added`（false）与 `note field_removed`（false），
+`classification=branch_required`，以 `compatible` 提交会被拒。导入后 `o1`
+的 `memo` 为 `""`（默认补齐）、`o2` 的 `memo` 为 `""`（显式 null 落默认）、
+`o2` 的 `measure` 为 `10.5`（数值原样保留）。
+
+### 11.6 演练与独立校验
+
+```
+python3 demo/run_contract_demo.py        # 10 个阶段，全部工件在临时目录
+```
+
+`demo/expected_contracts.py` 是**手工计算**的期望（不经过实现）；
+`demo/verify_contracts.py` 用**自己的 SQL** 直接读回 `ct_contracts` /
+`ct_fields` / `editions` / `ct_batches` / `cf_events`，逐字段与字面量比对。
+`demo/contract_specs.py` 只是**测试输入**，演练启动时把它们写进临时目录。
+
+阶段与断言：
+
+| 阶段 | 内容 |
+|---|---|
+| 1 | 两个提供方各登记初版：字段名与规范名不同（labA 用 `obs_id/rev/label/value`），类型也不同（labB 含 boolean 与可选 integer 字段）；同内容重送幂等 |
+| 2 | `compare` 复算 v2 对 v1 的逐字段清单，再以 `compatible` 发布；labB v2 只拓宽 `batch` |
+| 3 | v3 对 v2 为 `branch_required`；以 `compatible` 提交被拒（不能伪装），再以 `branch` 发布 |
+| 4 | 拒绝清单：删字段 / 收紧空值 / 窄化类型 / 增必需字段 / 改含义 / 改必需状态 / 改默认值 / 空默认值 / 空字段名；跳号、缺前版、自指成环、缺前版声明、内容不符重送；另用损坏的私有库复现"前版指针图成环"（正常 CLI 的 max+1 编号无法构造长环，此路径为防御性校验）；每次拒绝后重开库确认版本图未变 |
+| 5 | 带契约导入：可选默认值补齐、显式 null 落默认、小数 measure 原样存储；labB 的 boolean/integer 默认值 |
+| 6 | 重开数据库后结果不变（新进程读库） |
+| 7 | 一批前 3 行合法、末行非法：整批拒收、无 editions/batches/回执/通知残留；诊断只含行号/字段名/类别，**不含**样本载荷；各类拒绝类别逐一核对；v3 形状的行在 v2 下被拒、显式 v3 才收；未知版本拒绝 |
+| 8 | 两个进程竞争同一后继版本：一个完整版本胜出，败者 `content_conflict`，字段行数只属于完整版本 |
+| 9 | 原有**无契约**导入照旧（固定字段、整数 measure、回执无契约字段），变更通知照旧 |
+| 10 | 撤回与通知仍可用：契约数据被撤回擦除、契约元数据不动、remove 后不再 refresh、通知不含载荷 |

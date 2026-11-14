@@ -2,6 +2,14 @@
 
   rvault --store S init
   rvault --store S import --batch-tag T [--input FILE]
+                  [--provider P --material-type M --contract-version N]
+  rvault --store S contract register --provider P --material-type M
+                  --version N --fields FILE [--predecessor N]
+                  [--compatibility compatible|branch]
+  rvault --store S contract compare --provider P --material-type M
+                  --against N --fields FILE
+  rvault --store S contract show --provider P --material-type M --version N
+  rvault --store S contract list [--provider P] [--material-type M]
   rvault --store S query --study X
   rvault --store S history --study X --observation O
   rvault --store S aggregate --study X [--groups groups.json]
@@ -25,9 +33,10 @@
   rvault --store S lineage jobs
 
 Exit codes: 0 ok; 2 rejected input / conflicting credential, withdrawal, ack,
-trim or lineage declaration; 3 bundle aborted because a withdrawal landed
-during creation; 4 unknown or unreadable object; 5 integrity failure;
-6 change-feed start position no longer retained (gap).
+trim, lineage or contract registration; 3 bundle aborted because a withdrawal
+landed during creation; 4 unknown or unreadable object (including an unknown
+contract version); 5 integrity failure; 6 change-feed start position no longer
+retained (gap).
 """
 from __future__ import annotations
 
@@ -37,6 +46,7 @@ import sys
 
 from . import bundles as bundles_mod
 from . import changefeed as feed_mod
+from . import contracts as contracts_mod
 from . import intake as intake_mod
 from . import lineage as lineage_mod
 from . import query as query_mod
@@ -70,6 +80,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("import", help="atomically import one JSONL batch")
     sp.add_argument("--batch-tag", required=True)
     sp.add_argument("--input", default="-", help="JSONL file (default: stdin)")
+    sp.add_argument("--provider", help="input contract: provider id (with "
+                    "--material-type and --contract-version)")
+    sp.add_argument("--material-type", help="input contract: material type")
+    sp.add_argument("--contract-version", type=int,
+                    help="input contract: exact published version to check "
+                         "against (never silently the latest)")
 
     sp = sub.add_parser("query", help="current projection (adopted edition per observation)")
     sp.add_argument("--study", required=True)
@@ -106,6 +122,35 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--withdrawal-id")
 
     sub.add_parser("reconcile", help="sweep crash leftovers (also runs automatically)")
+
+    c = sub.add_parser("contract", help="versioned upstream input contracts")
+    csub = c.add_subparsers(dest="ccmd", required=True)
+    sp = csub.add_parser("register", help="publish one immutable contract version")
+    sp.add_argument("--provider", required=True)
+    sp.add_argument("--material-type", required=True)
+    sp.add_argument("--version", type=int, required=True)
+    sp.add_argument("--fields", required=True,
+                    help='JSON file: {"fields": [{name,type,required,nullable,'
+                         'default?,target?}, ...]}')
+    sp.add_argument("--predecessor", type=int,
+                    help="version this one was compared with (required after v1)")
+    sp.add_argument("--compatibility", choices=["compatible", "branch"],
+                    help="explicit compatibility declaration: 'compatible' "
+                         "(compatible upgrade) or 'branch' (new branch); "
+                         "the first version omits it")
+    sp = csub.add_parser("compare", help="field-by-field diff against one version")
+    sp.add_argument("--provider", required=True)
+    sp.add_argument("--material-type", required=True)
+    sp.add_argument("--against", type=int, required=True,
+                    help="published version to compare the candidate with")
+    sp.add_argument("--fields", required=True)
+    sp = csub.add_parser("show", help="one published version with its change list")
+    sp.add_argument("--provider", required=True)
+    sp.add_argument("--material-type", required=True)
+    sp.add_argument("--version", type=int, required=True)
+    sp = csub.add_parser("list", help="published contract versions")
+    sp.add_argument("--provider")
+    sp.add_argument("--material-type")
 
     f = sub.add_parser("feed", help="persistent change notifications for indexers")
     fsub = f.add_subparsers(dest="fcmd", required=True)
@@ -169,13 +214,29 @@ def main(argv=None) -> int:
         return 0
 
     if args.cmd == "import":
+        selectors = (args.provider, args.material_type, args.contract_version)
+        given = [s is not None for s in selectors]
+        selection = None
+        if any(given):
+            if not all(given):
+                print(json.dumps({"error": "contract-checked import requires all "
+                                           "of --provider, --material-type and "
+                                           "--contract-version",
+                                  "status": "rejected"}), file=sys.stderr)
+                return 2
+            selection = selectors
         if args.input == "-":
-            code, obj = intake_mod.import_batch(store, args.batch_tag, sys.stdin.buffer)
+            code, obj = intake_mod.import_batch(store, args.batch_tag,
+                                                sys.stdin.buffer, selection)
         else:
             with open(args.input, "rb") as f:
-                code, obj = intake_mod.import_batch(store, args.batch_tag, f)
+                code, obj = intake_mod.import_batch(store, args.batch_tag, f,
+                                                    selection)
         _print(obj)
         return code
+
+    if args.cmd == "contract":
+        return _contract_command(store, args)
 
     if args.cmd == "query":
         conn = store.connect()
@@ -287,6 +348,45 @@ def main(argv=None) -> int:
     if args.cmd == "lineage":
         return _lineage_command(store, args)
 
+    return 1
+
+
+def _read_fields_file(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            document = json.load(f)
+    except FileNotFoundError:
+        raise contracts_mod.InvalidContract("fields file not found: " + path)
+    except json.JSONDecodeError as e:
+        raise contracts_mod.InvalidContract("fields file is not valid JSON: %s" % e)
+    return contracts_mod.parse_spec(document)
+
+
+def _contract_command(store, args) -> int:
+    try:
+        if args.ccmd == "register":
+            specs = _read_fields_file(args.fields)
+            code, obj = contracts_mod.register(
+                store, args.provider, args.material_type, args.version, specs,
+                args.predecessor, args.compatibility)
+            _print(obj)
+            return code
+        if args.ccmd == "compare":
+            specs = _read_fields_file(args.fields)
+            _print(contracts_mod.compare(store, args.provider, args.material_type,
+                                         args.against, specs))
+            return 0
+        if args.ccmd == "show":
+            _print(contracts_mod.show(store, args.provider, args.material_type,
+                                      args.version))
+            return 0
+        if args.ccmd == "list":
+            _print({"contracts": contracts_mod.list_versions(
+                store, args.provider, args.material_type)})
+            return 0
+    except contracts_mod.ContractError as e:
+        _print(e.as_dict())
+        return e.exit_code
     return 1
 
 

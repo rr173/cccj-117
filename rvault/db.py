@@ -36,6 +36,20 @@ ln_nodes                : (study, observation, edition) -> provenance kind
 ln_edges                : output triple -> input triple (depends-on relation);
                           never rewritten by withdrawal, never inherited by
                           newer editions
+
+Input-contract tables (see contracts.py):
+ct_contracts            : one immutable published version per
+                          (provider, material_type, version) with its
+                          predecessor, explicit compatibility declaration and a
+                          content digest; never updated after publication
+ct_fields               : field definitions of one contract version (name,
+                          type, required, nullable, optional default and an
+                          optional canonical target); schema metadata only - no
+                          observed research payload is ever stored here
+ct_batches              : batch_tag -> the protocol (legacy | contract) and
+                          contract version it was admitted under, so the same
+                          credential cannot silently switch protocols or
+                          contract versions
 """
 from __future__ import annotations
 
@@ -210,6 +224,39 @@ CREATE TABLE IF NOT EXISTS ln_edges(
 );
 CREATE INDEX IF NOT EXISTS ln_edges_in
   ON ln_edges(in_study, in_observation, in_edition);
+CREATE TABLE IF NOT EXISTS ct_contracts(
+  provider TEXT NOT NULL,
+  material_type TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  predecessor INTEGER,              -- referenced previous version (NULL for v1)
+  compatibility TEXT NOT NULL,      -- initial | compatible | branch
+  content_digest TEXT NOT NULL,
+  change_summary TEXT NOT NULL,     -- JSON: entry -> {kind, detail} (reviewable)
+  published_at TEXT NOT NULL,
+  PRIMARY KEY(provider, material_type, version)
+);
+CREATE INDEX IF NOT EXISTS ct_contracts_pred
+  ON ct_contracts(provider, material_type, predecessor);
+CREATE TABLE IF NOT EXISTS ct_fields(
+  provider TEXT NOT NULL,
+  material_type TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  position INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL,               -- string | integer | number | boolean
+  required INTEGER NOT NULL,        -- 0 | 1
+  nullable INTEGER NOT NULL,        -- 0 | 1
+  default_json TEXT,                -- NULL when the field has no default
+  target TEXT,                      -- canonical intake field it maps to, if any
+  PRIMARY KEY(provider, material_type, version, name)
+);
+CREATE TABLE IF NOT EXISTS ct_batches(
+  batch_tag TEXT PRIMARY KEY,
+  provider TEXT,
+  material_type TEXT,
+  contract_version INTEGER,
+  protocol TEXT NOT NULL            -- legacy | contract | contract_branch
+);
 """
 
 
