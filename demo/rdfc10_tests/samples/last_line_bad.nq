@@ -1,0 +1,3 @@
+# valid first statement, then a broken one on the last line
+<https://catalog.example/records/0001> <https://catalog.example/vocab#hasPart> _:x .
+<https://catalog.example/records/0002> <https://catalog.example/vocab#hasPart> "unterminated

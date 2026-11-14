@@ -52,12 +52,22 @@
   rvault bpe vocab   --database DB [--output FILE] [--lock FILE]
   rvault bpe encode  --vocab FILE --input FILE --output FILE
   rvault bpe decode  --vocab FILE --input FILE --output FILE
+  rvault rdf normalize --input FILE.nq [--output FILE] [--max-work N]
+  rvault rdf compare   --left FILE.nq --right FILE.nq [--max-work N]
 
-Exit codes: 0 ok; 2 rejected input / conflicting credential, withdrawal, ack,
-trim, lineage or contract registration; 3 bundle aborted because a withdrawal
-landed during creation; 4 unknown or unreadable object (including an unknown
-contract version); 5 integrity failure; 6 change-feed start position no longer
-retained (gap).
+The ``rdf`` commands are offline RDF dataset preparation per W3C RDF Dataset
+Canonicalization 1.0 (SHA-256, canonical N-Quads).  They read only the N-Quads
+files named on the command line, never the store or revision lineage, and offer
+no reasoning or query service.
+
+Exit codes: 0 ok (rdf compare: equivalent); 1 rdf compare found different
+canonical bytes (not a failure); 2 rejected input (including malformed
+N-Quads) / conflicting credential, withdrawal, ack, trim, lineage or contract
+registration; 3 bundle aborted because a withdrawal landed during creation, or
+an rdf operation that could not complete (resource_limit, write or
+correspondence failure); 4 unknown or unreadable object (including an unknown
+contract version, or an unreadable rdf input file); 5 integrity failure; 6
+change-feed start position no longer retained (gap).
 """
 from __future__ import annotations
 
@@ -82,6 +92,7 @@ except ModuleNotFoundError as _nested_import_error:
     nested_engine = None
     _NESTED_IMPORT_ERROR = _nested_import_error
 from . import query as query_mod
+from . import rdfcanon as rdfcanon_mod
 from . import withdraw as withdraw_mod
 from .store import Store, reconcile
 
@@ -99,6 +110,16 @@ def _load_groups(path):
             isinstance(k, str) and isinstance(v, str) for k, v in m.items()):
         raise SystemExit("groups file must be a JSON object mapping person -> group_code")
     return m
+
+
+def _positive_int(text: str) -> int:
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    if isinstance(value, bool) or value <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return value
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -323,6 +344,28 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--vocab", required=True)
     sp.add_argument("--input", required=True)
     sp.add_argument("--output", required=True)
+
+    rd = sub.add_parser("rdf", help="offline RDF dataset canonicalization "
+                                    "(RDFC-1.0) and identity checking; "
+                                    "never reads the store")
+    rdsub = rd.add_subparsers(dest="rdcmd", required=True)
+    sp = rdsub.add_parser("normalize", help="write canonical N-Quads for one "
+                                            "input dataset")
+    sp.add_argument("--input", required=True, help="N-Quads input file")
+    sp.add_argument("--output", help="canonical N-Quads output file "
+                                     "(default: none, report only)")
+    sp.add_argument("--max-work", type=_positive_int,
+                    default=rdfcanon_mod.DEFAULT_MAX_WORK,
+                    help="deterministic work budget (default: %d)"
+                         % rdfcanon_mod.DEFAULT_MAX_WORK)
+    sp = rdsub.add_parser("compare", help="canonicalize both files and report "
+                                          "whether they are the same dataset")
+    sp.add_argument("--left", required=True, help="first N-Quads file")
+    sp.add_argument("--right", required=True, help="second N-Quads file")
+    sp.add_argument("--max-work", type=_positive_int,
+                    default=rdfcanon_mod.DEFAULT_MAX_WORK,
+                    help="work budget shared by both sides (default: %d)"
+                         % rdfcanon_mod.DEFAULT_MAX_WORK)
     return p
 
 
@@ -330,6 +373,8 @@ def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     if args.cmd == "bpe":
         return _bpe_command(args)
+    if args.cmd == "rdf":
+        return _rdf_command(args)
     if not args.store:
         print(json.dumps({"error": "--store is required for this command"}),
               file=sys.stderr)
@@ -743,6 +788,171 @@ def _lineage_command(store, args) -> int:
         print(json.dumps(e.as_dict(), ensure_ascii=False), file=sys.stderr)
         return e.exit_code
     return 1
+
+
+def _read_nquads_file(path):
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+    except FileNotFoundError:
+        print(json.dumps({"code": "unknown_input", "error": "file not found",
+                          "input": path}), file=sys.stderr)
+        raise _RdfFailure(4)
+    except OSError as e:
+        print(json.dumps({"code": "unreadable_input",
+                          "error": "cannot read input file: %s" % e,
+                          "input": path}), file=sys.stderr)
+        raise _RdfFailure(4)
+    return data
+
+
+class _RdfFailure(Exception):
+    def __init__(self, code):
+        self.code = code
+
+
+def _write_output_atomically(path, payload):
+    """Replace ``path`` with payload, never damaging the previous bytes.
+
+    The payload is written to a sibling temp file, fsynced and then renamed;
+    any failure before the rename leaves the old file byte-identical.
+    """
+    tmp = path + ".tmp.%d" % os.getpid()
+    try:
+        with open(tmp, "wb") as f:
+            f.write(payload)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except OSError as e:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise rdfcanon_mod.WriteError(
+            "cannot write canonical output: %s" % e, output=path)
+
+
+def _rdf_report(result) -> dict:
+    return result.as_dict()
+
+
+def _rdf_command(args) -> int:
+    if args.rdcmd == "normalize":
+        try:
+            data = _read_nquads_file(args.input)
+            result = rdfcanon_mod.canonicalize_bytes(
+                data, max_work=args.max_work, source=args.input)
+            payload = result.canonical_bytes
+            if args.output:
+                _write_output_atomically(args.output, payload)
+            report = _rdf_report(result)
+            if args.output:
+                report["output"] = os.path.abspath(args.output)
+            _print(report)
+            return 0
+        except _RdfFailure as e:
+            return e.code
+        except rdfcanon_mod.CanonError as e:
+            print(json.dumps(e.as_dict(), ensure_ascii=False), file=sys.stderr)
+            return e.status
+        except OSError as e:
+            print(json.dumps({"code": "io_error", "error": str(e)}),
+                  file=sys.stderr)
+            return 3
+        return 1
+
+    # compare
+    try:
+        left_data = _read_nquads_file(args.left)
+        right_data = _read_nquads_file(args.right)
+        budget = rdfcanon_mod.WorkBudget(args.max_work)
+        left = rdfcanon_mod.canonicalize_bytes(
+            left_data, source=args.left, budget=budget)
+        right = rdfcanon_mod.canonicalize_bytes(
+            right_data, source=args.right, budget=budget)
+    except _RdfFailure as e:
+        return e.code
+    except rdfcanon_mod.CanonError as e:
+        payload = e.as_dict()
+        payload["operation"] = "compare"
+        print(json.dumps(payload, ensure_ascii=False), file=sys.stderr)
+        return e.status
+    except OSError as e:
+        print(json.dumps({"code": "io_error", "error": str(e)}),
+              file=sys.stderr)
+        return 3
+
+    offset, kind = rdfcanon_mod.first_difference(
+        left.canonical_bytes, right.canonical_bytes)
+    common = {
+        "algorithm": "RDFC-1.0",
+        "hash_algorithm": "SHA-256",
+        "max_work": budget.max_work,
+        "work_used": budget.used,
+        "left": {"input": os.path.abspath(args.left),
+                 "sha256": left.digest,
+                 "quad_count": left.quad_count,
+                 "blank_nodes": left.blank_node_count},
+        "right": {"input": os.path.abspath(args.right),
+                  "sha256": right.digest,
+                  "quad_count": right.quad_count,
+                  "blank_nodes": right.blank_node_count},
+    }
+    if offset is None:
+        try:
+            correspondence = rdfcanon_mod.build_correspondence(left, right)
+        except rdfcanon_mod.CanonError as e:
+            # Equal bytes must imply a bijection; if it does not, the files
+            # are not reportable as equivalent.
+            payload = e.as_dict()
+            payload["status"] = "failed"
+            print(json.dumps(payload, ensure_ascii=False), file=sys.stderr)
+            return 3
+        report = dict(common, status="equivalent",
+                      blank_node_correspondence=correspondence)
+        _print(report)
+        return 0
+
+    # Different is a *byte comparison position* only, not a semantic diff.
+    report = dict(common, status="different")
+    if kind == "byte_mismatch":
+        line, column = rdfcanon_mod.offset_location(
+            left.canonical_bytes, offset)
+        report["first_difference"] = {
+            "byte_offset": offset, "line": line, "column": column,
+            "kind": "byte_mismatch",
+            "left_line": _canonical_line(left.canonical_bytes, offset),
+            "right_line": _canonical_line(right.canonical_bytes, offset),
+        }
+    elif kind == "left_ended":
+        line, column = rdfcanon_mod.offset_location(
+            left.canonical_bytes, offset)
+        report["first_difference"] = {
+            "byte_offset": offset, "line": line, "column": column,
+            "kind": "left_ended",
+            "left_length": len(left.canonical_bytes),
+            "right_length": len(right.canonical_bytes),
+        }
+    else:
+        line, column = rdfcanon_mod.offset_location(
+            right.canonical_bytes, offset)
+        report["first_difference"] = {
+            "byte_offset": offset, "line": line, "column": column,
+            "kind": "right_ended",
+            "left_length": len(left.canonical_bytes),
+            "right_length": len(right.canonical_bytes),
+        }
+    _print(report)
+    return 1
+
+
+def _canonical_line(payload: bytes, offset: int) -> str:
+    start = payload.rfind(b"\n", 0, offset) + 1
+    end = payload.find(b"\n", offset)
+    if end == -1:
+        end = len(payload)
+    return payload[start:end].decode("utf-8", "replace")
 
 
 def _bpe_command(args) -> int:

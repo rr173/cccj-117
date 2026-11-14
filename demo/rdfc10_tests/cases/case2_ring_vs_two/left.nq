@@ -1,0 +1,7 @@
+# one directed cycle through six catalogue nodes
+_:part0 <https://catalog.example/vocab#follows> _:part1 .
+_:part1 <https://catalog.example/vocab#follows> _:part2 .
+_:part2 <https://catalog.example/vocab#follows> _:part3 .
+_:part3 <https://catalog.example/vocab#follows> _:part4 .
+_:part4 <https://catalog.example/vocab#follows> _:part5 .
+_:part5 <https://catalog.example/vocab#follows> _:part0 .

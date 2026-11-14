@@ -1,0 +1,7 @@
+# catalogue export A (as received)
+_:x  <https://catalog.example/vocab#partOf>   _:y .
+_:y  <https://catalog.example/vocab#title>    "Volume one — draft"@EN .
+_:y  <https://catalog.example/vocab#itemType> <https://catalog.example/vocab#Monograph> .
+_:x  <https://catalog.example/vocab#recordedIn> _:g .
+_:g  <https://catalog.example/vocab#shelf>    "R-01" .
+<https://catalog.example/records/0001> <https://catalog.example/vocab#hasPart> _:x .

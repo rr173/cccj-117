@@ -1,0 +1,12 @@
+# catalogue export B (re-exported later)
+
+
+<https://catalog.example/records/0001> <https://catalog.example/vocab#hasPart> _:node77 .
+_:zzz1 <https://catalog.example/vocab#itemType> <https://catalog.example/vocab#Monograph> .
+_:node77 <https://catalog.example/vocab#partOf> _:zzz1 .
+_:zzz1 <https://catalog.example/vocab#title> "Volume one — draft"@en .
+_:node77 <https://catalog.example/vocab#recordedIn> _:shapeA .
+_:shapeA <https://catalog.example/vocab#shelf> "R-01" .
+_:node77 <https://catalog.example/vocab#partOf> _:zzz1 .
+_:shapeA <https://catalog.example/vocab#shelf> "R-01" .
+<https://catalog.example/records/0001> <https://catalog.example/vocab#hasPart> _:node77 .

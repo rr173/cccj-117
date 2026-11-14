@@ -287,7 +287,10 @@ def parser_error_position(reader, exc):
     """
     arg = exc.args[0] if exc.args else ""
     msg = arg.decode("utf-8", "replace") if isinstance(arg, bytes) else str(arg)
-    if "premature EOF" in msg:
+    # yajl (C backend) reports a truncated document as "premature EOF";
+    # the pure-Python backend reports "Incomplete JSON content".  Both mean
+    # reading reached the end of the input.
+    if "premature EOF" in msg or "Incomplete JSON content" in msg:
         return reader.bytes_consumed, "end_of_file"
     lines = msg.split("\n")
     if len(lines) >= 3 and "(right here)" in lines[2]:

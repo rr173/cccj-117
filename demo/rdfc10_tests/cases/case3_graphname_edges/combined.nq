@@ -1,0 +1,11 @@
+# graph boundaries + literals + self loop
+<https://catalog.example/records/0001> <https://catalog.example/vocab#hasPart> _:item _:g .
+_:g <https://catalog.example/vocab#shelfLabel> "七号架 — finals" _:g .
+_:g <https://catalog.example/vocab#shelfLabel> "七号架 — finals"@ZH-hant _:g .
+_:item <https://catalog.example/vocab#hasSelf> _:item .
+_:item <https://catalog.example/vocab#quote> "a \"quoted\" value" .
+_:item <https://catalog.example/vocab#count> "01"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:item <https://catalog.example/vocab#count> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:item <https://catalog.example/vocab#plain> "same"^^<http://www.w3.org/2001/XMLSchema#string> .
+_:item <https://catalog.example/vocab#plain> "same" .
+<https://catalog.example/records/0001> <https://catalog.example/vocab#aboutGraph> _:g .

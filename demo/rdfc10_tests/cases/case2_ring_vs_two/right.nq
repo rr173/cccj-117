@@ -1,0 +1,7 @@
+# two disconnected three-node cycles, same node count and degree profile
+_:volA0 <https://catalog.example/vocab#follows> _:volA1 .
+_:volA1 <https://catalog.example/vocab#follows> _:volA2 .
+_:volA2 <https://catalog.example/vocab#follows> _:volA0 .
+_:volB0 <https://catalog.example/vocab#follows> _:volB1 .
+_:volB1 <https://catalog.example/vocab#follows> _:volB2 .
+_:volB2 <https://catalog.example/vocab#follows> _:volB0 .

@@ -1,0 +1,8 @@
+# deliberately symmetric: a single directed 6-cycle with a symmetric label
+# sharing every first-degree hash; canonicalization needs the full search
+_:ring0 <urn:rel> _:ring1 .
+_:ring1 <urn:rel> _:ring2 .
+_:ring2 <urn:rel> _:ring3 .
+_:ring3 <urn:rel> _:ring4 .
+_:ring4 <urn:rel> _:ring5 .
+_:ring5 <urn:rel> _:ring0 .
