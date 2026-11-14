@@ -123,6 +123,8 @@ def reconcile(store: Store) -> dict:
                 remove = _stale_pid_file(name)
             elif name.startswith("mail.") and name.endswith(".part"):
                 remove = _stale_pid_file(name)
+            elif name.startswith("nested.") and name.endswith(".input"):
+                remove = _stale_pid_file(name)
             if remove:
                 try:
                     os.remove(os.path.join(store.tmp_dir, name))

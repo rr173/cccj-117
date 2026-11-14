@@ -5,7 +5,9 @@
 可崩溃续办的方式执行撤回擦除。范围仅限工作区逻辑数据与普通 bundle 文件；
 **不包含**用户账号、审批流等周边系统。
 
-无第三方依赖，Python ≥ 3.9 标准库即可运行。
+除 §13 的嵌套整备子系统需要 **ijson** 库（`pip install ijson`）外，其余功能
+无第三方依赖，Python ≥ 3.9 标准库即可运行；不安装 ijson 时旧命令照常工作，
+只有 `nested` 子命令会提示缺少依赖。
 
 ```
 PYTHONPATH=. python3 -m rvault --store <存储目录> <命令> ...
@@ -797,3 +799,226 @@ python3 demo/run_mail_demo.py      # 全部工件在临时目录，启动时打�
 | 8 | 大附件邮件（19.7 MB / 12 万行）：报告输入规模与实测峰值内存（约 20 MB） |
 | 9 | `mail status` 单封/列表/未知摘要（退出码 4）；`resume` 未知邮件（退出码 4） |
 
+
+## 13. 嵌套研究表整备（nested）
+
+有一类来件不是一行一个观测，而是一个参加者一条根记录、每次访视各自带读
+数数组、参加者另有独立授权条目。§1 的七字段接收与 §12 的邮件入口都不处理
+这种嵌套结构。本子系统是**独立模块**：读一份顶层为数组的 JSON 文件，按一份
+**声明式整备方案**投影出**自己的关系数据库**（每张方案表一张物理表），不改
+造观测协议、不写 `vault.sqlite3` 的业务表、不发变更通知、不计算研究指标。
+
+```
+rvault --store S nested plan show --plan FILE
+rvault --store S nested prepare --plan FILE --input FILE --database DB
+rvault --store S nested resume  --plan FILE --input FILE --database DB
+rvault --store S nested status  --database DB [--source DIGEST]
+rvault --store S nested roots   --database DB [--source DIGEST] [--root N]
+rvault --store S nested read    --database DB --table T [--source DIGEST]
+                  [--root N] [--limit N]
+rvault --store S nested children --database DB --table T --parent ROW_ID [--limit N]
+```
+
+`--database` 是**产物库**（自建，含投影表与本次整备的运行记录）；`--store`
+仍是受管 store，只用于 scratch 暂存与既有命令。`prepare` 与 `resume` 走同
+一条管线（`resume` 要求该源摘要已有运行记录，否则退出码 4）。
+
+### 13.1 方案格式
+
+方案是 JSON 对象，**恰好**三类键：
+
+```json
+{
+  "version": 1,
+  "root": {
+    "name": "participants",
+    "columns": [
+      {"name": "person", "path": ["person"], "type": "string"},
+      {"name": "study", "path": ["study"], "type": "string"}
+    ]
+  },
+  "tables": [
+    {"name": "visits", "parent": "participants", "path": ["visits"],
+     "columns": [
+       {"name": "visit_label", "path": ["label"], "type": "string"}
+     ]},
+    {"name": "readings", "parent": "visits", "path": ["readings"],
+     "columns": [
+       {"name": "code", "path": ["code"], "type": "string"},
+       {"name": "value", "path": ["value"], "type": "integer"}
+     ]},
+    {"name": "consents", "parent": "participants", "path": ["consents"],
+     "columns": [
+       {"name": "kind", "path": ["kind"], "type": "string"}
+     ]}
+  ]
+}
+```
+
+语义与硬性规则：
+
+- 一张根表、任意张子表。每张子表声明 `parent`（根表名或另一张子表名）
+  与 `path`：从**父表对象**出发到**目标数组**的相对路径。每次跨越重复数组
+  都必须另建子表；普通列路径可以穿过对象，**不能穿过数组**（把数组写进
+  列路径会被拒绝，而不是偷偷展开）。
+- 路径是**字符串段数组**。键名里的点、空格、斜杠（`"odd.key/name"`、
+  `["meta","tags"]` 等）都是普通字符。不拼接字符串、不猜层次；空段被拒绝。
+- 每列声明从**当前对象**（根对象或子表数组的一项）出发到标量的相对路径
+  与 `type`：`string` / `integer` / `decimal` / `boolean`。`integer` 与
+  `boolean` 分开；`integer`/`decimal` 以**精确十进制文本**落库，不经过二进制
+  浮点，大整数与小数位数不丢失。
+- 表名、列名在方案内唯一；表名不得以 `ns_` 开头；列名不得等于内部身份列
+  （`row_id` / `parent_row_id` / `root_row_id` / `source_digest` /
+  `root_index` / `index_path` / `array_path` / `ordinal`），也不得以
+  `__present` 结尾（存在标记列保留）。同一表内两列不得投影同一路径。
+- 同一键位置只能是一种角色：标量列、中间对象、子数组，三者互斥；同一父表
+  的两张子表不得指向同一数组。**冲突定义**整份方案拒绝。
+- 编译先于读取：未知父表、父子成环、重复表/列、冲突定义、非法类型或路径
+  都在**读任何来件字节之前**报错（退出码 2），不会建库、不会读入件。
+
+### 13.1.1 题目例子的实际方案
+
+对输入
+
+```json
+{"person":"P1","study":"S1",
+ "visits":[{"label":"V1","readings":[{"code":"A","value":0},{"code":"A","value":2}]},
+           {"label":"V2","readings":[]}],
+ "consents":[{"kind":"lab"},{"kind":"contact"},{"kind":"reuse"}]}
+```
+
+（顶层省略为单元素数组）完整的方案为：
+
+```json
+{
+  "version": 1,
+  "root": {
+    "name": "participants",
+    "columns": [
+      {"name": "person", "path": ["person"], "type": "string"},
+      {"name": "study", "path": ["study"], "type": "string"}
+    ]
+  },
+  "tables": [
+    {"name": "visits", "parent": "participants", "path": ["visits"],
+     "columns": [
+       {"name": "visit_label", "path": ["label"], "type": "string"}
+     ]},
+    {"name": "readings", "parent": "visits", "path": ["readings"],
+     "columns": [
+       {"name": "code", "path": ["code"], "type": "string"},
+       {"name": "value", "path": ["value"], "type": "integer"}
+     ]},
+    {"name": "consents", "parent": "participants", "path": ["consents"],
+     "columns": [
+       {"name": "kind", "path": ["kind"], "type": "string"}
+     ]}
+  ]
+}
+```
+
+投影结果：`participants` 1 行（P1/S1）、`visits` 2 行（V1、V2；V2 的空
+readings 不生成读数行但保留访视行）、`readings` 2 行（都属于 V1，code 相同
+也不去重）、`consents` 3 行。读数列与授权列是两个分支，不会相乘。
+`demo/expected_nested.py` 里这份期望（行身份、父行、坐标、值与存在标记）
+全部手写，并由 `demo/verify_nested.py` 用自己的 SQL 逐项核对。
+
+### 13.2 输入与投影语义
+
+- 顶层是一个 JSON 数组，每项是一个根对象；子数组的每项**必须是对象**。
+  `[1, 2]`、`"x"`、`{...}` 这类顶层或项形状错误按源级错误/根级拒绝处理。
+- **数组缺失或为空**：不生成子行（但父行照常保留）。**显式 `null` 或其它
+  类型放在数组位置**：根记录被拒（`array_is_null` / `array_expected`）。
+  **列路径缺失**与**显式 `null`** 都合法，但落库可区分：每列有
+  `col__present`，`0`=缺失、`1`=有值（含 `0`/`false`/`""`）、`2`=显式 null。
+- 对象里**重复同一个 JSON 键**：整条根记录被拒（`duplicate_key`），绝不靠
+  “最后一个值覆盖前一个值”（这是一个独立的键集合检查，不依赖解析器行为）。
+- 未知字段不参与投影（但仍参与重复键检查与结构合法性）。**类型不符**拒绝
+  根记录，不做隐式文本/数值转换。
+- 读数列与授权列是两条**独立分支**，各自按自己的数组下标生成行——不会相乘
+  成笛卡尔积，也不会因为两行的业务值相同而去重：内容相同的两项仍是两行；
+  不同文件里相同的 `person` 也不会自动合并。
+
+### 13.3 行身份、来源与顺序
+
+- 每行身份 `row_id = sha256(json([source_digest, root_index, array_path]))`，
+  与业务值无关、可重复计算。`source_digest` 是**原始文件字节**的 sha256；
+  `array_path` 是从根到该行的**完整数组下标路径**（每一层写成
+  `[子表名, 下标]`，根行为 `[]`），因此不同子表在同一数字下标下也不会撞车。
+- 每行另有 `parent_row_id`（直接父行身份，根行为空）、`root_row_id`、`source_digest`、
+  `root_index`、`index_path`（下标数组）与 `ordinal`（本表本根内创建顺序）。
+  来源位置能把一行查回**同一个根**和**同一个数组项**。
+- `read` 按 `(root_index, ordinal, row_id)` 逐行输出，可复现输入顺序；
+  `children --parent ROW_ID` 按同样顺序给出直接子行。每行都带
+  `row_id / parent_row_id / root_row_id / source{...} / values{col:{value,present}}`。
+  读取逐游标流式进行，不把整棵树重新拼成内存对象。
+
+### 13.4 落库边界、错误与续办
+
+- **一条根记录及其所有后代是一个事务边界**。任一错误撤销本条根已生成的
+  全部父子行，记录 `root_index`、路径与错误类别（`duplicate_key` /
+  `type_mismatch` / `array_is_null` / `array_expected` / `item_not_object` /
+  `root_not_object` / `structure_mismatch` / `number_out_of_range` /
+  `nesting_too_deep` / `object_keys_exceeded`），随后继续处理下一条结构完整
+  根。诊断只含序号、标识路径与类别——**不含**姓名、读数、备注等载荷。
+- **JSON 语法本身坏**（截断、非法 token、尾随数据、非 UTF-8）：当前根回滚、
+  停止并明确报告无法继续的**字节位置**（略有：`exact_offset` / `end_of_file` /
+  `upper_bound`）。以前已提交的根保留，当前根不留半棵树；不猜下一条记录
+  的开头。
+- 方案绑定到**产物库**（`meta.plan_digest`）：换方案会 `plan_mismatch`，不会
+  沿用同一进度。以**源文件摘要**登记进度；同一文件重送或中断后重开时，已
+  提交的根按 `root_index` 跳过、不再增加行；未提交根从头重处理。允许整文件
+  从头流式扫描并跳过已确认根，不要求随机跳字节。
+- 摘要必须在决定“跳过哪些根”之前确定，所以 `prepare` 先把源文件**流式
+  spool 到 store 的 `tmp/` 并同时算 sha256**（内存仍是一个读块），再从头解析
+  spool 文件；结束即删。意外退出留下的 `nested.<pid>.*.input` 由 `reconcile`
+  按属主 pid 回收（临时文件永不作为已接收凭据）。产物库里的 `ns_runs` /
+  `ns_roots` 只存摘要、序号、状态与错误类别。
+- 每一行写入与“该根已提交”的持久记录在**同一事务**提交，故“后代已写入、
+  根未提交”处强退时该根整棵树随事务消失（确定性强退）；恢复后行身份与父子
+  归属不变。相同源换协议或换方案、或源字节改变（摘要不同）都不会误接原进度。
+  源文件大小与登记不符时报 `source_changed`（退出码 4）。
+
+### 13.5 解析栈与内存边界
+
+按**解析事件**处理，不用 `ijson.items` 组装整对象，也不整文件读入：
+
+| 状态 | 内存边界 |
+|---|---|
+| 解析器自身 | 一个读块（`--chunk-size`，默认 64 KiB） |
+| 结构栈（对象/数组帧） | 每个**当前打开**的容器一帧；嵌套深度硬上限 `MAX_NESTING`（+方案深度），超限拒绝该根 |
+| 未决父字段 | 每个当前路径层级最多一个行帧，各含**该表方案列数**个槽位；父对象的标量无论写在子数组**之前还是之后**，代价都是 O(方案宽度)，与子数组长度无关（写入子行前已算好父行身份，父行在对象结束时插入） |
+| 重复键检查 | 每个**打开的**对象一个键字符串集合；单对象键数超 `MAX_KEYS_PER_OBJECT` 拒绝该根（随单个对象增长，不随文件增长） |
+| 诊断 | 每根仅首错：类别 + 标识路径 |
+| 事务暂存 | 一根的所有行在一个 SQLite 事务内；页缓存受 `PRAGMA cache_size` 约束（8 MiB），回滚日志在磁盘——内存有界，仅磁盘随根大小增长 |
+
+即：不是只把读取改小块就称有界；上述每一处状态都有明确界，且整棵内存对象树
+从不组装。演练实测 3.8 MB / 12 万读数单根文件在 200 MB 地址空间上限下峰值
+RSS ≈ 30 MB。
+
+### 13.6 演练与独立校验
+
+```
+python3 demo/run_nested_demo.py     # 全部工件在临时目录，启动时打印路径
+```
+
+`demo/expected_nested.py` 是**手写**期望（行身份按身份规则在期望文件里独立
+重算，来源摘要由字面量算；投影值、存在标记、父行与坐标全部是字面量）；
+`demo/verify_nested.py` 用**自己的 SQL** 直接读回产物库逐字段比对，不调用正式
+整备器计算答案。阶段：
+
+| 阶段 | 内容 |
+|---|---|
+| 1 | 方案编译与全部拒绝类别（未知父表/成环/重复表/重复列/冲突定义/重复目标/保留列名/非法类型/非法路径）；坏方案在**动输入前**被拒且不建库 |
+| 2 | 题目例子：1 参加者 / 2 访视 / 2 读数 / 3 授权，逐项父子键与坐标一致；`read`/`children`/`roots`/`status` 接口 |
+| 3 | 父字段（person/study）写在子数组**之后**：投影值与早写版逐列相同 |
+| 4 | 空数组、缺失、null、false、0、空串、内容重复的授权/读数、带 `/`、`.`、空格的键名 |
+| 5 | 中间坏根（重复键 / 类型错）：坏根整树消失，前后好根仍可读，诊断不含载荷 |
+| 6 | 末尾语法截断：无半棵树，已提交根保留，报告中止位置；续办不翻倍 |
+| 7 | 在“后代行已写入、根未提交”处 SIGKILL 后 `resume`：不翻倍、身份与父归属不变；重送同字节全跳过；换方案 / 换源字节不误接 |
+| 8 | 产物库换方案被拒（`plan_mismatch`），原库未被改动 |
+| 9 | 少量根、单根 12 万后代：在 200 MB 地址空间上限下实跑，核对各表总行数、首尾子项与实测峰值 RSS |
+| 10 | 旧命令（import/query/mail status）照旧；嵌套产物从不写入 `vault.sqlite3` 业务表 |
+
+退出码沿用 §9：成功 0；方案/结构/语法/换方案或换源等拒绝 2；`resume` 未知源
+或数据库不可读 4。逐阶段说明与手算期望见 `demo/NESTED_DEMO.md`。

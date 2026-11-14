@@ -34,6 +34,15 @@
   rvault --store S mail receive --input FILE.eml [--chunk-size N]
   rvault --store S mail resume --input FILE.eml [--chunk-size N]
   rvault --store S mail status [--message DIGEST]
+  rvault --store S nested plan show --plan FILE
+  rvault --store S nested prepare --plan FILE --input FILE --database DB
+  rvault --store S nested resume  --plan FILE --input FILE --database DB
+  rvault --store S nested status  --database DB [--source DIGEST]
+  rvault --store S nested roots   --database DB [--source DIGEST] [--root N]
+  rvault --store S nested read    --database DB --table T [--source DIGEST]
+                  [--root N] [--limit N]
+  rvault --store S nested children --database DB --table T --parent ROW_ID
+                  [--limit N]
 
 Exit codes: 0 ok; 2 rejected input / conflicting credential, withdrawal, ack,
 trim, lineage or contract registration; 3 bundle aborted because a withdrawal
@@ -45,6 +54,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 
 from . import bundles as bundles_mod
@@ -53,6 +63,13 @@ from . import contracts as contracts_mod
 from . import intake as intake_mod
 from . import lineage as lineage_mod
 from . import mail as mail_mod
+from . import study_nested as nested_mod
+
+try:
+    from . import study_nested_engine as nested_engine
+except ModuleNotFoundError as _nested_import_error:
+    nested_engine = None
+    _NESTED_IMPORT_ERROR = _nested_import_error
 from . import query as query_mod
 from . import withdraw as withdraw_mod
 from .store import Store, reconcile
@@ -216,6 +233,46 @@ def build_parser() -> argparse.ArgumentParser:
                     help="read chunk size in bytes (default: 65536)")
     sp = msub.add_parser("status", help="mail processing records")
     sp.add_argument("--message", help="message digest (default: all messages)")
+
+    n = sub.add_parser("nested", help="nested study-table preparation "
+                       "(independent relational output database)")
+    nsub = n.add_subparsers(dest="ncmd", required=True)
+    np_ = nsub.add_parser("plan", help="compile and show a preparation plan")
+    psub = np_.add_subparsers(dest="pcmd", required=True)
+    sp = psub.add_parser("show", help="validate a plan and print its tables")
+    sp.add_argument("--plan", required=True, help="declarative plan JSON file")
+    sp = nsub.add_parser("prepare", help="prepare one JSON source file")
+    sp.add_argument("--plan", required=True)
+    sp.add_argument("--input", required=True,
+                    help="JSON file whose top level is an array of roots")
+    sp.add_argument("--database", required=True,
+                    help="output relational database (created/bound to plan)")
+    sp.add_argument("--chunk-size", type=int, default=65536,
+                    help="parser read chunk in bytes (default 65536)")
+    sp = nsub.add_parser("resume", help="continue a previously started source")
+    sp.add_argument("--plan", required=True)
+    sp.add_argument("--input", required=True)
+    sp.add_argument("--database", required=True)
+    sp.add_argument("--chunk-size", type=int, default=65536)
+    sp = nsub.add_parser("status", help="run and per-root records")
+    sp.add_argument("--database", required=True)
+    sp.add_argument("--source", help="source digest (default: all sources)")
+    sp = nsub.add_parser("roots", help="per-root processing outcome")
+    sp.add_argument("--database", required=True)
+    sp.add_argument("--source")
+    sp.add_argument("--root", type=int)
+    sp = nsub.add_parser("read", help="stream projected rows of one table")
+    sp.add_argument("--database", required=True)
+    sp.add_argument("--table", required=True)
+    sp.add_argument("--source")
+    sp.add_argument("--root", type=int)
+    sp.add_argument("--limit", type=int)
+    sp = nsub.add_parser("children",
+                         help="direct child rows of one parent row")
+    sp.add_argument("--database", required=True)
+    sp.add_argument("--table", required=True)
+    sp.add_argument("--parent", required=True)
+    sp.add_argument("--limit", type=int)
     return p
 
 
@@ -366,6 +423,9 @@ def main(argv=None) -> int:
     if args.cmd == "lineage":
         return _lineage_command(store, args)
 
+    if args.cmd == "nested":
+        return _nested_command(store, args)
+
     if args.cmd == "mail":
         if args.mcmd in ("receive", "resume"):
             code, obj = mail_mod.receive(
@@ -383,6 +443,130 @@ def main(argv=None) -> int:
             _print(obj)
             return 0
 
+    return 1
+
+
+def _nested_command(store, args) -> int:
+    if nested_engine is None:
+        print(json.dumps({"code": "missing_dependency",
+                          "error": "the nested subsystem requires the "
+                                   "ijson library (pip install ijson)",
+                          "detail": str(_NESTED_IMPORT_ERROR)}),
+              file=sys.stderr)
+        return 4
+    try:
+        if args.ncmd == "plan":
+            plan = nested_mod.load_plan(args.plan)
+            _print({"status": "valid", "plan_digest": plan.digest,
+                    "root": plan.root_name,
+                    "tables": [{"name": t.name, "parent": t.parent,
+                                "path": t.path,
+                                "columns": [c.as_dict() for c in t.columns]}
+                               for t in plan.tables]})
+            return 0
+        if args.ncmd in ("prepare", "resume"):
+            plan = nested_mod.load_plan(args.plan)
+            try:
+                summary = nested_engine.prepare(
+                    store, plan, args.input, args.database,
+                    require_existing=(args.ncmd == "resume"),
+                    chunk_size=args.chunk_size)
+            except FileNotFoundError:
+                print(json.dumps({"code": "unknown_input",
+                                  "error": "input file not found",
+                                  "input": args.input}), file=sys.stderr)
+                return 4
+            _print(summary)
+            # 0 = every processed root handled (committed or rejected with a
+            # recorded per-root outcome); 2 = the document itself could not be
+            # finished (syntax damage / wrong top-level shape).
+            return 2 if summary.get("status") == "aborted" else 0
+        if args.ncmd == "status":
+            if not os.path.exists(args.database):
+                print(json.dumps({"code": "unknown_database",
+                                  "error": "no such database",
+                                  "database": args.database}),
+                      file=sys.stderr)
+                return 4
+            conn = nested_mod.open_output(args.database)
+            try:
+                if not nested_engine.plan_tables(conn):
+                    print(json.dumps({"code": "unknown_database",
+                                      "error": "not a preparation database"}),
+                          file=sys.stderr)
+                    return 4
+                runs = list(nested_engine.run_records(conn, args.source))
+                totals = {}
+                for t in nested_engine.table_names(conn):
+                    n = conn.execute(
+                        'SELECT COUNT(*) c FROM %s' % nested_mod.ident(t)
+                        + (" WHERE source_digest=?" if args.source else ""),
+                        ((args.source,) if args.source else ())).fetchone()["c"]
+                    totals[t] = n
+                _print({"runs": runs, "row_totals": totals})
+                return 0
+            finally:
+                conn.close()
+        if args.ncmd == "roots":
+            if not os.path.exists(args.database):
+                print(json.dumps({"code": "unknown_database"}),
+                      file=sys.stderr)
+                return 4
+            conn = nested_mod.open_output(args.database)
+            try:
+                if not nested_engine.plan_tables(conn):
+                    return 4
+                _print({"roots": list(nested_engine.root_records(
+                    conn, args.source, args.root))})
+                return 0
+            finally:
+                conn.close()
+        if args.ncmd == "read":
+            if not os.path.exists(args.database):
+                print(json.dumps({"code": "unknown_database"}),
+                      file=sys.stderr)
+                return 4
+            conn = nested_mod.open_output(args.database)
+            try:
+                if not nested_engine.plan_tables(conn):
+                    return 4
+                try:
+                    rows = nested_engine.iter_rows(
+                        conn, args.table, args.source, args.root,
+                        limit=args.limit)
+                except nested_engine.UnknownTable:
+                    print(json.dumps({"code": "unknown_table",
+                                      "table": args.table}), file=sys.stderr)
+                    return 4
+                for row in rows:
+                    sys.stdout.write(json.dumps(row, ensure_ascii=False) + "\n")
+                return 0
+            finally:
+                conn.close()
+        if args.ncmd == "children":
+            if not os.path.exists(args.database):
+                print(json.dumps({"code": "unknown_database"}),
+                      file=sys.stderr)
+                return 4
+            conn = nested_mod.open_output(args.database)
+            try:
+                if not nested_engine.plan_tables(conn):
+                    return 4
+                try:
+                    rows = nested_engine.children(
+                        conn, args.table, args.parent, limit=args.limit)
+                except nested_engine.UnknownTable:
+                    print(json.dumps({"code": "unknown_table",
+                                      "table": args.table}), file=sys.stderr)
+                    return 4
+                for row in rows:
+                    sys.stdout.write(json.dumps(row, ensure_ascii=False) + "\n")
+                return 0
+            finally:
+                conn.close()
+    except nested_mod.PlanError as e:
+        print(json.dumps(e.as_dict(), ensure_ascii=False), file=sys.stderr)
+        return e.exit_code
     return 1
 
 
