@@ -18,11 +18,16 @@
   rvault --store S feed disable --consumer NAME
   rvault --store S feed status [--consumer NAME]
   rvault --store S feed trim [--through-seq N]
+  rvault --store S lineage declare --job J --rule R [--input FILE]
+  rvault --store S lineage leaf [--input FILE]
+  rvault --store S lineage upstream --node JSON [--max-depth N]
+  rvault --store S lineage downstream --node JSON [--max-depth N]
+  rvault --store S lineage jobs
 
-Exit codes: 0 ok; 2 rejected input / conflicting credential, withdrawal, ack or
-trim; 3 bundle aborted because a withdrawal landed during creation; 4 unknown or
-unreadable object; 5 integrity failure; 6 change-feed start position no longer
-retained (gap).
+Exit codes: 0 ok; 2 rejected input / conflicting credential, withdrawal, ack,
+trim or lineage declaration; 3 bundle aborted because a withdrawal landed
+during creation; 4 unknown or unreadable object; 5 integrity failure;
+6 change-feed start position no longer retained (gap).
 """
 from __future__ import annotations
 
@@ -33,6 +38,7 @@ import sys
 from . import bundles as bundles_mod
 from . import changefeed as feed_mod
 from . import intake as intake_mod
+from . import lineage as lineage_mod
 from . import query as query_mod
 from . import withdraw as withdraw_mod
 from .store import Store, reconcile
@@ -125,6 +131,28 @@ def build_parser() -> argparse.ArgumentParser:
     sp = fsub.add_parser("trim", help="delete fully acknowledged frames")
     sp.add_argument("--through-seq", type=int,
                     help="explicit upper bound (required when no consumer is enabled)")
+
+    ln = sub.add_parser("lineage", help="revision-level data lineage")
+    lsub = ln.add_subparsers(dest="lcmd", required=True)
+    sp = lsub.add_parser("declare", help="record one processing job (JSONL relation)")
+    sp.add_argument("--job", required=True, help="job identifier")
+    sp.add_argument("--rule", required=True, help="processing rule identifier")
+    sp.add_argument("--input", default="-",
+                    help='JSONL: {"output": node, "inputs": [node, ...]} (default: stdin)')
+    sp = lsub.add_parser("leaf", help="declare revisions as original collection leaves")
+    sp.add_argument("--input", default="-",
+                    help="JSONL of node objects (default: stdin)")
+    sp = lsub.add_parser("upstream", help="revisions this one depends on")
+    sp.add_argument("--node", required=True,
+                    help='JSON {"study":..,"observation":..,"edition":..}')
+    sp.add_argument("--max-depth", type=int, default=None,
+                    help="maximum hops (default: unlimited)")
+    sp = lsub.add_parser("downstream", help="outputs that depend on this revision")
+    sp.add_argument("--node", required=True,
+                    help='JSON {"study":..,"observation":..,"edition":..}')
+    sp.add_argument("--max-depth", type=int, default=None,
+                    help="maximum hops (default: unlimited)")
+    lsub.add_parser("jobs", help="list recorded processing jobs")
     return p
 
 
@@ -256,6 +284,9 @@ def main(argv=None) -> int:
     if args.cmd == "feed":
         return _feed_command(store, args)
 
+    if args.cmd == "lineage":
+        return _lineage_command(store, args)
+
     return 1
 
 
@@ -298,4 +329,42 @@ def _feed_command(store, args) -> int:
         return _feed_error(e)
     except (feed_mod.ChangeFeedError, ValueError) as e:
         return _feed_error(e)
+    return 1
+
+
+def _lineage_command(store, args) -> int:
+    try:
+        if args.lcmd == "declare":
+            if args.input == "-":
+                code, obj = lineage_mod.declare(store, args.job, args.rule,
+                                                sys.stdin.buffer)
+            else:
+                with open(args.input, "rb") as f:
+                    code, obj = lineage_mod.declare(store, args.job, args.rule, f)
+            _print(obj)
+            return code
+        if args.lcmd == "leaf":
+            if args.input == "-":
+                code, obj = lineage_mod.declare_leaves(store, sys.stdin.buffer)
+            else:
+                with open(args.input, "rb") as f:
+                    code, obj = lineage_mod.declare_leaves(store, f)
+            _print(obj)
+            return code
+        if args.lcmd == "jobs":
+            _print({"jobs": lineage_mod.list_jobs(store)})
+            return 0
+        if args.lcmd in ("upstream", "downstream"):
+            node = lineage_mod.parse_node_arg(args.node)
+            gen = lineage_mod.traverse(store, node, args.max_depth, args.lcmd)
+            try:
+                for line in gen:
+                    sys.stdout.write(line + "\n")
+                    sys.stdout.flush()
+            except BrokenPipeError:
+                return 0
+            return 0
+    except lineage_mod.LineageError as e:
+        print(json.dumps(e.as_dict(), ensure_ascii=False), file=sys.stderr)
+        return e.exit_code
     return 1

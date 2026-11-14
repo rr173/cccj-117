@@ -27,6 +27,15 @@ cf_removed_objects      : every object ever announced as removed; a refresh
 cf_consumers            : named consumers with their own durable acked_seq
 cf_deliveries /         : the single pending (or acknowledged) delivery
 cf_delivery_frames        range per consumer, with its ack credential
+
+Lineage tables (see lineage.py):
+ln_jobs                 : declared processing jobs (job_id -> rule_id + digest
+                          of the normalized complete relation; identifiers only)
+ln_nodes                : (study, observation, edition) -> provenance kind
+                          ('leaf' | 'derived') and the declaring job
+ln_edges                : output triple -> input triple (depends-on relation);
+                          never rewritten by withdrawal, never inherited by
+                          newer editions
 """
 from __future__ import annotations
 
@@ -172,6 +181,35 @@ CREATE TABLE IF NOT EXISTS cf_delivery_frames(
   frame_id INTEGER NOT NULL,
   PRIMARY KEY(delivery_id, frame_id)
 );
+CREATE TABLE IF NOT EXISTS ln_jobs(
+  job_id TEXT PRIMARY KEY,
+  rule_id TEXT NOT NULL,
+  relation_digest TEXT NOT NULL,  -- digest of the normalized complete relation
+  output_count INTEGER NOT NULL,
+  edge_count INTEGER NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS ln_nodes(
+  study TEXT NOT NULL,
+  observation TEXT NOT NULL,
+  edition INTEGER NOT NULL,
+  kind TEXT NOT NULL,             -- leaf | derived
+  job_id TEXT,                    -- declaring job for derived nodes
+  PRIMARY KEY(study, observation, edition)
+);
+CREATE TABLE IF NOT EXISTS ln_edges(
+  out_study TEXT NOT NULL,
+  out_observation TEXT NOT NULL,
+  out_edition INTEGER NOT NULL,
+  in_study TEXT NOT NULL,
+  in_observation TEXT NOT NULL,
+  in_edition INTEGER NOT NULL,
+  job_id TEXT NOT NULL,
+  PRIMARY KEY(out_study, out_observation, out_edition,
+              in_study, in_observation, in_edition)
+);
+CREATE INDEX IF NOT EXISTS ln_edges_in
+  ON ln_edges(in_study, in_observation, in_edition);
 """
 
 

@@ -11,7 +11,7 @@
       "enabled": true,
       "backlog_events": 1,
       "pending_delivery": {
-        "token": "D3e52cceeb4d323d7acabcaf5",
+        "token": "D03345f1de367b16a3052f7df",
         "from_seq": 4,
         "through_seq": 4
       }
@@ -26,7 +26,7 @@
     "enabled": true,
     "backlog_events": 1,
     "pending_delivery": {
-      "token": "D3e52cceeb4d323d7acabcaf5",
+      "token": "D03345f1de367b16a3052f7df",
       "from_seq": 4,
       "through_seq": 4
     }

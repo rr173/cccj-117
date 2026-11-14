@@ -350,3 +350,142 @@ python3 demo/verify_feed_txn.py  # 生产者事务回滚 / 并发生产者（也
 | 4  | 对象不存在或不可读（bundle 已删除、未知 id） |
 | 5  | 完整性校验失败（bundle 摘要不符） |
 | 6  | 通知起点已不可用（低于保留下界；报文给出缺口与最早可用位置） |
+
+## 10. 修订级数据血缘（lineage）
+
+研究数据处理作业把若干份原始观测合成新的观测。血缘子系统只**登记和查询**
+"哪条输出修订用了哪些输入修订"的加工关系：不运行研究算法、不刷新索引
+（不产生变更通知）、不生成数据包、不复制载荷、不改变观测数值。节点一律用
+`(study, observation, edition)` 三元组精确定位，**绝不**绑定到"当前最高稿"。
+
+```
+rvault --store S lineage declare --job J --rule R [--input FILE]   # 登记一次加工作业
+rvault --store S lineage leaf [--input FILE]                       # 声明原始采集叶子
+rvault --store S lineage upstream   --node JSON [--max-depth N]    # 沿结果追到原始来件
+rvault --store S lineage downstream --node JSON [--max-depth N]    # 从输入查出受影响的结果
+rvault --store S lineage jobs                                      # 已登记作业清单
+```
+
+### 10.1 登记模型
+
+- `declare` 的输入是 JSONL，每行一个输出：
+  `{"output": {study,observation,edition}, "inputs": [{...}, ...]}`（inputs 非空）。
+  一个作业可以有多个输出；同一输入可被多个输出使用；允许跨 study。
+- `leaf` 的输入是 JSONL 节点列表，把修订显式声明为**原始采集叶子**。
+- **未说明来源的修订属于"来源未知"**：没有父节点不等于原始数据，只有显式
+  `leaf` 声明才算原始采集。原始叶子与加工输出互斥（同一修订不能两者皆是）。
+- 声明只含标识符（三元组、作业标识、规则标识），不含姓名、测量或备注。
+
+生效前的核对（任一不满足即整批拒绝，退出码 2）：
+
+- 每个节点（输出与输入）都必须**确实存在对应修订且当前可读取**（在 editions
+  中且未被撤回屏障挡住）；禁止为已撤回或不存在的修订补登记来源。
+- 拒绝自依赖与**任意长度的环**：批量声明中的输出可以互相依赖，也可能与已登记
+  关系一起构成环——一律对**合并后的关系**判断（BFS 求新输出的上游闭包后在
+  子图上做拓扑删除），全部通过才保存。
+- **一个输出的来源只能确定一次**：相同作业标识 + 规则标识 + 规范化后的完整
+  关系（输入排序去重，顺序与重复输入不影响等价判断）重送返回 `duplicate`
+  幂等成功；同标识改内容（或改规则标识）拒绝；另一作业试图重新认领已说明
+  来源的输出也拒绝。
+- 批量声明是**一个事务**：任何一个冲突都不会留下作业行、节点来源或部分边。
+  声明在 `BEGIN IMMEDIATE` 内完成校验与写入，两个进程同时声明相反方向时，
+  后到者在同一数据库写锁下重新检查，不会各自通过后合出环（演练 phase 6 用
+  同步点复现）。
+
+### 10.2 查询
+
+输出为 JSONL 流：首行 `start`（起点身份、来源类型、可读状态），随后每个节点
+一行，末行 `end` 给出记录数与 `complete: true` 结束标记。逐条输出，可管道。
+
+- 每个返回节点给出**最短距离**（BFS 层序，真实边而非遍历遇到的第一条路径）
+  和**一条见证路径**：每层按 (study, observation, edition) 三元组排序取最小
+  前驱作为父指针，确定性可复算。共享祖先只出现一次。源节点本身不计入依赖
+  列表。
+- 上游节点区分：`leaf`（声明的原始叶子）、`unknown`（来源未知）、`derived`
+  （有输入）。深度边界处仍有上游但未展开的节点标 `truncated: true`；下游边界
+  处还有后续依赖的节点同样标记。`--max-depth 0` 只回起点状态，`end` 行的
+  `depth_limited` 区分"确实没有"与"未展开"。
+- 一次查询在**一个读事务**内完成：查询期间并发登记的新关系不会混进本次答复
+  （演练 phase 7 用同步点复现）。
+- 访问集合、距离与前沿放在 SQLite 临时工作表（磁盘页由引擎管理，内存有界），
+  每个节点只访问一次，**不枚举路径**——深层大量共享祖先的图不会路径组合爆炸
+  （演练 phase 9：600 节点 / 5900 边，理论路径 10^59，实际输出 590 条、
+  峰值 RSS ≈ 35 MB）。
+
+### 10.3 与撤回的关系
+
+- 撤回**不删除、不改接**已有血缘关系；新到的更高 edition 不继承旧 edition 的
+  边，未声明前显示来源未知。
+- 查询把当前已撤回的节点标为 `"state": "withdrawn"`（edition 行已清除或人处于
+  屏障下），身份关系仍可用来解释上下游；**不会**借追溯读回已撤回载荷（血缘表
+  与查询输出里没有任何姓名/测量/备注）。
+- 已撤回或不存在的修订不能补登记新来源（作为输出或输入都拒绝）。
+- 这些只是血缘自身的可见性规则：不要求级联删除衍生结果，也不改现有撤回、
+  通知或数据包协议。
+
+### 10.4 手算小图与可复跑示例
+
+`demo/run_lineage_demo.py` 每次在临时目录重建并逐条核对下图（含拒绝、并发、
+规模与内存）；下面是同一组命令的手工推演。两个 study、一个多输出加工作业、
+菱形共享祖先 + 较短替代路径、一个未知来源节点：
+
+```
+study alpha                         study beta
+raw1 e1 (leaf)  raw2 e1 (leaf)      raw3 e1 (来源未知)
+  |  \            |                   |
+  |   \           |                   |
+  |    \          v                   |
+  |     `──────> out e1 [J1]          |
+  |                |                  |
+  |                v                  |
+  `─────────────> mid e1 [J1] <───────+   (J1 是多输出作业：mid 与 out)
+  |                |
+  |                |
+  +──────┐         |
+         v         v
+       final e1 [J2] ── 依赖 {mid e1, out e1, raw1 e1}
+
+raw1 是菱形共享祖先（final→mid→raw1 与 final→out→raw1，深度 2），
+另有较短替代路径 final→raw1（深度 1）→ raw1 只出现一次，距离 1。
+```
+
+```sh
+S=/tmp/ln && PYTHONPATH=. python3 -m rvault --store $S init
+# 导入两份来件（alpha: raw1,raw2,mid,final；beta: raw3,out），略去载荷字段
+printf '%s\n' \
+ '{"study":"alpha","person":"p1","observation":"raw1","edition":1,"display_name":"A","measure":10,"memo":""}' \
+ '{"study":"alpha","person":"p2","observation":"raw2","edition":1,"display_name":"B","measure":20,"memo":""}' \
+ '{"study":"alpha","person":"p3","observation":"mid","edition":1,"display_name":"C","measure":30,"memo":""}' \
+ '{"study":"alpha","person":"p4","observation":"final","edition":1,"display_name":"D","measure":40,"memo":""}' \
+ '{"study":"beta","person":"p5","observation":"raw3","edition":1,"display_name":"E","measure":50,"memo":""}' \
+ '{"study":"beta","person":"p6","observation":"out","edition":1,"display_name":"F","measure":60,"memo":""}' \
+ | PYTHONPATH=. python3 -m rvault --store $S import --batch-tag b1
+# 原始叶子 + 两个加工作业
+printf '%s\n' '{"study":"alpha","observation":"raw1","edition":1}' \
+              '{"study":"alpha","observation":"raw2","edition":1}' \
+ | PYTHONPATH=. python3 -m rvault --store $S lineage leaf
+printf '%s\n' \
+ '{"output":{"study":"alpha","observation":"mid","edition":1},"inputs":[{"study":"alpha","observation":"raw1","edition":1},{"study":"beta","observation":"raw3","edition":1}]}' \
+ '{"output":{"study":"beta","observation":"out","edition":1},"inputs":[{"study":"alpha","observation":"raw1","edition":1},{"study":"alpha","observation":"raw2","edition":1}]}' \
+ | PYTHONPATH=. python3 -m rvault --store $S lineage declare --job J1 --rule R1
+printf '%s\n' \
+ '{"output":{"study":"alpha","observation":"final","edition":1},"inputs":[{"study":"alpha","observation":"mid","edition":1},{"study":"beta","observation":"out","edition":1},{"study":"alpha","observation":"raw1","edition":1}]}' \
+ | PYTHONPATH=. python3 -m rvault --store $S lineage declare --job J2 --rule R2
+# 双向追溯
+PYTHONPATH=. python3 -m rvault --store $S lineage upstream \
+  --node '{"study":"alpha","observation":"final","edition":1}'
+PYTHONPATH=. python3 -m rvault --store $S lineage downstream \
+  --node '{"study":"beta","observation":"raw3","edition":1}' --max-depth 2
+```
+
+上游手算答案（final e1）：`mid e1`(1, derived)、`out e1`(1, derived)、
+`raw1 e1`(1, leaf，走直接边)、`raw2 e1`(2, leaf)、`raw3 e1`(2, unknown)，
+共 5 条；`--max-depth 1` 时 mid/out 标 `truncated: true`、raw1 不标。
+下游手算答案（raw3 e1）：`mid e1`(1)、`final e1`(2)。
+
+血缘表结构在 `rvault/db.py` 的 `SCHEMA` 里（`ln_*` 三张表），
+`Store.ensure()` 在每条命令上执行 `CREATE TABLE IF NOT EXISTS`，旧 store
+无需迁移即可使用。退出码沿用 §9：成功 0，校验/冲突/环拒绝 2（stderr 给出
+JSON 错误码：`unknown_revision` / `revision_withdrawn` /
+`output_already_claimed` / `leaf_conflicts_with_derived` / `job_conflict` /
+`self_dependency` / `cycle_detected` / `invalid_declaration`）。
